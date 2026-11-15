@@ -12,6 +12,7 @@ pub mod login;
 pub mod service;
 pub mod settings;
 pub mod stage;
+pub mod status;
 pub mod world;
 
 pub use error::{Error, Result};

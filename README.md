@@ -112,3 +112,57 @@ logout:
 
 With `yes`, an inhibitor of `drowse-inhibit` ends with the session where
 it was taken; with `no` it outlives the logout.
+
+## The state in waybar
+
+`drowse-status --waybar --follow` writes one line of JSON at each change,
+and as the time left runs; waybar needs no `interval`. A click takes or
+lets go the inhibitor of `drowse-inhibit`.
+
+```json
+"custom/drowse": {
+    "exec": "drowse-status --waybar --follow",
+    "return-type": "json",
+    "format": "{icon} {}",
+    "format-icons": {
+        "unknown": "?",
+        "announced": "⏰",
+        "own": "☕",
+        "other": "🔒",
+        "session-other": "👤",
+        "idle": "🌙",
+        "active": ""
+    },
+    "on-click": "drowse-inhibit toggle"
+}
+```
+
+With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announced` nf-md-alarm, `own` nf-md-coffee, `other` nf-md-lock, `session-other` nf-md-account, `idle` nf-md-sleep):
+
+```json
+    "format-icons": {
+        "unknown": "󰋖",
+        "announced": "󰀠",
+        "own": "󰅶",
+        "other": "󰌾",
+        "session-other": "󰀄",
+        "idle": "󰒲",
+        "active": ""
+    },
+```
+
+The classes of the module: the state (`active`, `idle`, `announced`,
+`unknown`), what holds the system (`own`, `other`, `session-other`,
+`session-own`, `none`, `hidden`) and the power (`battery`, `ac`).
+
+```css
+#custom-drowse.announced     { color: #f38ba8; animation: blink 1s steps(2) infinite; }
+#custom-drowse.own           { color: #a6e3a1; }
+#custom-drowse.other         { color: #f9e2af; }
+#custom-drowse.session-other { color: #89b4fa; }
+#custom-drowse.unknown       { color: #6c7086; }
+
+@keyframes blink { to { opacity: 0.3; } }
+```
+
+The texts are in English or Russian, by the locale of the session.

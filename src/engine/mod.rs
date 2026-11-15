@@ -473,7 +473,7 @@ impl Engine {
 }
 
 /// The inhibitors that hold the system up.
-fn holding(inhibitors: &[Inhibitor]) -> Vec<Inhibitor> {
+pub(crate) fn holding(inhibitors: &[Inhibitor]) -> Vec<Inhibitor> {
     inhibitors
         .iter()
         .filter(|inhibitor| MODES_THAT_HOLD.contains(&inhibitor.mode.as_str()))
