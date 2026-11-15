@@ -3,4 +3,8 @@
 //! arguments and runs this library.
 
 pub mod error;
+pub mod login;
 pub mod settings;
+pub mod world;
+
+pub use error::{Error, Result};

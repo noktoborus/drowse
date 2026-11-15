@@ -13,6 +13,18 @@ pub enum Error {
         /// The error of the system.
         source: std::io::Error,
     },
+    /// A call on the system bus failed.
+    Bus {
+        /// What the call was for.
+        what: &'static str,
+        /// The error of the bus.
+        source: zbus::Error,
+    },
+    /// The monitor of sd-login cannot start.
+    SessionMonitor {
+        /// The error of the system.
+        source: std::io::Error,
+    },
 }
 
 impl fmt::Display for Error {
@@ -21,6 +33,8 @@ impl fmt::Display for Error {
             Self::ReadSettings { path, .. } => {
                 write!(f, "cannot read the settings file {}", path.display())
             }
+            Self::Bus { what, .. } => write!(f, "cannot {what}"),
+            Self::SessionMonitor { .. } => f.write_str("cannot start the monitor of sd-login"),
         }
     }
 }
@@ -29,6 +43,8 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ReadSettings { source, .. } => Some(source),
+            Self::Bus { source, .. } => Some(source),
+            Self::SessionMonitor { source } => Some(source),
         }
     }
 }

@@ -61,6 +61,11 @@ session, seat, tty, type of a session, but no monitor and no state.
   the project.
 - sd-login: `libsystemd-sys`, its build script with `pkg-config`
   (AGENTS.md, `ffi`). A cross build needs a `pkg-config` of the target.
+  Only the monitor is taken from it (`sd_login_monitor_*`): the strings
+  of `sd_session_get_*` are made by `malloc` and must be freed by `free`
+  of C, which the crate does not give, and `libc` is not used (AGENTS.md,
+  `unix.calls`). The state, the type, the tty and the remote host of a
+  session are read on D-Bus, as properties of the session.
 - A call of the system, if one is needed: `rustix`; zbus takes it in
   already.
 - The loop: `tokio`, one thread (`current_thread`): the signals of

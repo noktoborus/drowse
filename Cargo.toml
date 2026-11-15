@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
+libsystemd-sys = "0.10.0"
 shlex = "2.0.1"
+tokio = { version = "1.54.1", features = ["rt", "macros", "time", "signal", "sync", "net"] }
+zbus = { version = "6.3.0", default-features = false, features = ["tokio", "proxy", "service"] }
 
 [lints.rust]
 unsafe_code = "deny"
