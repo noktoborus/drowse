@@ -1,0 +1,14 @@
+[package]
+name = "drowse"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
