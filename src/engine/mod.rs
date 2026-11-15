@@ -216,11 +216,11 @@ impl Engine {
         out
     }
 
-    /// The service stops: every unit of a stage that ran is stopped.
+    /// The service stops: every unit of a stage that ran is stopped; the
+    /// state stays as it is until the service leaves the bus.
     pub fn stop(&mut self, now: u64) -> Vec<Command> {
         let mut out = Vec::new();
         self.stop_units(now, &mut out);
-        self.phase = Phase::Active;
         out
     }
 

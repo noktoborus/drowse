@@ -2,9 +2,12 @@
 //! `drowse-inhibit` and `drowse-status`. A program only reads its
 //! arguments and runs this library.
 
+pub mod bus;
 pub mod engine;
 pub mod error;
+pub mod journal;
 pub mod login;
+pub mod service;
 pub mod settings;
 pub mod world;
 

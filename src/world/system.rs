@@ -207,6 +207,11 @@ async fn read_power(upower: &UPowerProxy<'static>) -> PowerSource {
 }
 
 impl System {
+    /// The connection to the system bus.
+    pub fn connection(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Reads the properties of a session that `ListSessionsEx()` lacks.
     async fn session_details(
         &self,

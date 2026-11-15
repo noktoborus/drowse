@@ -25,6 +25,13 @@ pub enum Error {
         /// The error of the system.
         source: std::io::Error,
     },
+    /// The signal `SIGTERM` cannot be followed.
+    Signal {
+        /// The error of the system.
+        source: std::io::Error,
+    },
+    /// logind left the bus: the service exits, and systemd starts it again.
+    LogindGone,
 }
 
 impl fmt::Display for Error {
@@ -35,6 +42,8 @@ impl fmt::Display for Error {
             }
             Self::Bus { what, .. } => write!(f, "cannot {what}"),
             Self::SessionMonitor { .. } => f.write_str("cannot start the monitor of sd-login"),
+            Self::Signal { .. } => f.write_str("cannot follow SIGTERM"),
+            Self::LogindGone => f.write_str("logind left the bus"),
         }
     }
 }
@@ -44,7 +53,8 @@ impl std::error::Error for Error {
         match self {
             Self::ReadSettings { source, .. } => Some(source),
             Self::Bus { source, .. } => Some(source),
-            Self::SessionMonitor { source } => Some(source),
+            Self::SessionMonitor { source } | Self::Signal { source } => Some(source),
+            Self::LogindGone => None,
         }
     }
 }
