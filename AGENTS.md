@@ -97,8 +97,11 @@ RULE error.enum : a crate has one error enum in error.rs and a
      `Result<T>` alias
 RULE error.shape : the enum is closed, one variant per failure, with what
      is needed to act on it
-RULE error.source : an error of a lower layer is wrapped in a variant of
-     its own with `#[source]`
+RULE error.source : an error of a lower layer is kept in a variant of its
+     own; `source()` of `std::error::Error` returns it
+RULE error.impl : `Display` and `std::error::Error` are written by hand;
+     no crate for them
+WHY  the errors are few
 EX-  Err(format!("{error}"))
 RULE error.message : an error message is english and for the journal
 
