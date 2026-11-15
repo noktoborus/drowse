@@ -382,9 +382,10 @@ the profile by hand names it: `Resume=tuned-adm profile balanced`.
   `[IdleBattery-1]`, …, `[IdleAC]`, …), then `Key=value`. There are no drop-ins. With no file, the defaults apply.
 - A unit `drowsed-config.path` watches `/etc/drowse.conf`; on a change
   it runs `systemctl try-restart drowsed.service`.
-- `drowsed.service` and `drowsed-config.path` are on by default: both
-  have `WantedBy=multi-user.target`, and a preset file of the package
-  enables them (`/usr/lib/systemd/system-preset/50-drowse.preset`).
+- `drowsed.service`, `drowsed-config.path` and `drowsed-resume.service`
+  are on by default: a preset file of the package enables them
+  (`/usr/lib/systemd/system-preset/50-drowse.preset`). The files of the
+  system are in `systemd/`, `preset/` and `dbus/`.
 
 ### Times
 

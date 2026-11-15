@@ -9,6 +9,7 @@ pub mod journal;
 pub mod login;
 pub mod service;
 pub mod settings;
+pub mod stage;
 pub mod world;
 
 pub use error::{Error, Result};
