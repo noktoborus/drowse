@@ -10,7 +10,9 @@ version of the uConsole image, on 2026-11-14.
 
 `manager_get_idle_hint()`, `src/login/logind-core.c:450`.
 
-- The system is idle when no block inhibitor of `idle` is held and every
+- The system is idle when no inhibitor of `idle`, of mode `block` or
+  `block-weak`, is held (`manager_is_inhibited()` with flags 0 counts all
+  but `delay`, notes/logind-power-rights.md), and every
   session of the classes `user`, `user-early`, `user-light`,
   `user-early-light` and `greeter` is idle (`SESSION_CLASS_CAN_IDLE`,
   `src/login/logind-session.h:51`).
@@ -26,8 +28,9 @@ version of the uConsole image, on 2026-11-14.
 | Session | Idle when |
 |---|---|
 | Graphical (wayland, x11, mir) | the session says so itself, by `SetIdleHint`. logind does not measure it |
-| tty: a console, ssh with a pty | the last access to the tty (its atime) + `IdleActionSec` <= now |
-| Anything else: ssh with no pty (sftp, a tunnel, `ssh host command`) | never |
+| tty with a tty: a console | the last access to the tty (its atime) + `IdleActionSec` <= now |
+| tty with no tty: ssh (notes/session-types.md) | the controlling tty of the leader is read; none found: never |
+| Anything else | never |
 
 - For a tty, the delay is `IdleActionSec` (default 30 min,
   `src/login/logind-core.c:72`), or `StopIdleSessionSec` when it is
@@ -37,6 +40,25 @@ version of the uConsole image, on 2026-11-14.
 - Only a graphical session can set its idle hint
   (`session_set_idle_hint()`, `src/login/logind-session.c:1219`). The
   time of the hint is the time it was set, not the time of the last input.
+
+## When a console will become idle
+
+`session_get_idle_hint()`, `src/login/logind-session.c:1203`
+(`found_atime`): for a console the time given back (`IdleSinceHint`, and
+`since` of `ListSessionsEx()`) is the atime of the tty, the last input,
+whether the console is idle yet or not:
+
+```c
+found_atime:
+        if (ret_timestamp)
+                dual_timestamp_from_realtime(ret_timestamp, atime);
+```
+
+The delay is `IdleActionUSec` of the Manager
+(`src/login/logind-dbus.c:3838`, constant). So a watcher can work out
+when a console will become idle: `since + IdleActionUSec`, and read
+again then, in place of polling. That it is active again cannot be
+known ahead: only a read shows it.
 
 ## The action of logind
 
@@ -58,11 +80,13 @@ version of the uConsole image, on 2026-11-14.
 - The idle state of the service is that of logind.
 - A graphical session must set its idle hint. swayidle does it with
   `idlehint <timeout>`; with no such line, sway is never idle for logind.
-  The sway of the login screen too.
-- `IdleActionSec` must be small (1 min, say): it is added to the idle time
-  of every tty session. The time of the action is counted by the service.
-- A tty session that waits at a prompt is idle. A connection with no pty
-  keeps the system up while it is open.
+  The login screen: the branch `plans`, login-screen.md.
+- `IdleActionSec` is added to the idle time of a console (default 30
+  min). A small one makes a console idle sooner; the service takes a
+  console as logind says (the branch `plans`, later-consoles.md).
+- A console that waits at a prompt is idle. An ssh session is never idle,
+  with a pty or not: it keeps the system up while it is open
+  (notes/session-types.md).
 
 ## On the uConsole
 
@@ -70,4 +94,6 @@ version of the uConsole image, on 2026-11-14.
   `CONFIG_HIBERNATION`. Of the actions only `poweroff`, `halt`,
   `reboot`, `lock` work.
 - `halt` does not cut the power: the AXP228 keeps the board on.
-- Suspend to RAM: `uconsole/linux/notes/suspend-cm5.md`.
+- Suspend to RAM on the CM5 needs a bootloader with S3 and kernel patches
+  that are not released (Raspberry Pi, pull request 7514 of
+  raspberrypi/linux, open on 2026-10-24).
