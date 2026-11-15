@@ -20,12 +20,5 @@ pub fn write(level: Level, text: &str) {
 /// Writes an error and the errors under it, on one line, at the level
 /// `err`.
 pub fn error(error: &dyn std::error::Error) {
-    let mut line = error.to_string();
-    let mut source = error.source();
-    while let Some(cause) = source {
-        line.push_str(": ");
-        line.push_str(&cause.to_string());
-        source = cause.source();
-    }
-    eprintln!("<3>{}", line.replace('\n', " "));
+    eprintln!("<3>{}", crate::error::chain(error).replace('\n', " "));
 }

@@ -4,7 +4,7 @@
 
 pub mod system;
 
-mod logind;
+pub(crate) mod logind;
 mod systemd;
 mod upower;
 

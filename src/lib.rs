@@ -5,7 +5,9 @@
 pub mod bus;
 pub mod engine;
 pub mod error;
+pub mod inhibit;
 pub mod journal;
+pub mod language;
 pub mod login;
 pub mod service;
 pub mod settings;
@@ -13,3 +15,5 @@ pub mod stage;
 pub mod world;
 
 pub use error::{Error, Result};
+
+rust_i18n::i18n!("locales", fallback = "en");
