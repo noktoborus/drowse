@@ -362,3 +362,19 @@ fn a_failed_command_is_a_warning_and_the_stages_go_on() {
     assert!(has_line(&out, Level::Warning, "no Resume"));
     assert_eq!(engine.view().scheduled, ("radio off".to_owned(), mins(5)));
 }
+
+#[test]
+fn upower_gone_and_back() {
+    let (_, out) = Engine::new(
+        settings::Settings::default(),
+        PowerSource::Unknown,
+        0,
+        Vec::new(),
+    );
+    assert!(has_line(&out, Level::Warning, "upower: no answer"));
+    let mut engine = engine("", PowerSource::Ac);
+    let out = engine.on_power(0, PowerSource::Unknown);
+    assert!(has_line(&out, Level::Warning, "upower: no answer"));
+    let out = engine.on_power(1, PowerSource::Ac);
+    assert!(has_line(&out, Level::Info, "upower: back"));
+}

@@ -293,18 +293,23 @@ A source that comes back is written once, too.
 Examples:
 
 ```
-idle since 12:04:10, on battery: announce at 12:19:10, poweroff at 12:21:10
+idle, on battery: poweroff in 17 min
 announce: poweroff in 2 min
-cancel: new session 4 (alice, ssh)
-active: inhibitor of shutdown by "drowse-inhibit" (alice): "emerge"
-power: AC; no action on AC
-upower: not on the bus; the power is taken as AC
-suspend refused by logind: not configured or not supported by the kernel
-stage battery-1 (radio off): started
-stage battery-1 (radio off): the command still runs after 4 s; its Resume waits
-stage battery-1 (radio off): Resume
-power: battery at 12:30:00; the times moved: announce at 12:45:00, poweroff at 12:47:00
+action: poweroff
+cancel: session 4 (alice) in use
+cancel: inhibitor of sleep:shutdown by "drowse-inhibit" (uid 1000): "emerge"
+inhibitors let go: a new count
+power: AC; the times moved
+idle, on AC: no action
+upower: no answer; the power is taken as AC
+stage 1 (radio off): started
+drowsed-stage@battery-1.service: the command still runs after 4 s; its Resume waits
+drowsed-stage@battery-1.service: the command ended; its Resume runs late
+suspend refused by logind: org.freedesktop.login1.SleepVerbNotSupported: Sleep verb 'suspend' is not configured or configuration is not supported by kernel
 ```
+
+A time in the journal is the time left (`in 17 min`); the times on the
+bus are of `CLOCK_MONOTONIC`.
 
 The levels: a change of state is `info`; a cancel is `notice`; a source
 not there, a refusal, a command that waits or is killed is `warning`.

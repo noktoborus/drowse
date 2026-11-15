@@ -26,6 +26,9 @@ const CLASSES_THAT_COUNT: [&str; 5] = [
 /// The kinds of an inhibitor that hold the system up, whatever the action.
 const KINDS_THAT_HOLD: [&str; 3] = ["idle", "sleep", "shutdown"];
 
+/// The line of the journal when UPower does not answer.
+const UPOWER_GONE: &str = "upower: no answer; the power is taken as AC";
+
 /// The modes of an inhibitor that hold.
 const MODES_THAT_HOLD: [&str; 2] = ["block", "block-weak"];
 
@@ -150,12 +153,15 @@ impl Engine {
             activity: now,
             units: Units::default(),
         };
-        let out = engine
+        let mut out: Vec<Command> = engine
             .units
             .adopt_left_up(left_up)
             .into_iter()
             .map(Command::Job)
             .collect();
+        if power == PowerSource::Unknown {
+            out.push(warning(UPOWER_GONE.to_owned()));
+        }
         (engine, out)
     }
 
@@ -180,6 +186,11 @@ impl Engine {
     pub fn on_power(&mut self, now: u64, power: PowerSource) -> Vec<Command> {
         let mut out = Vec::new();
         let changed = section(power) != section(self.power);
+        if power != self.power && power == PowerSource::Unknown {
+            out.push(warning(UPOWER_GONE.to_owned()));
+        } else if power != self.power && self.power == PowerSource::Unknown {
+            out.push(info("upower: back on the bus".to_owned()));
+        }
         self.power = power;
         if changed {
             self.activity = now;
