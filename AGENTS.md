@@ -119,6 +119,8 @@ THEN cargo fmt --all
      cargo clippy --all-targets
      cargo build
      cargo test
+     cargo test -- --ignored        with dbus-daemon: the programs on a
+                                    bus of their own, with mocks
      ! cargo tree -e normal,build --depth 1 --prefix none \
          | grep -E '^(libc|nix) v'
 RULE format.tool = rustfmt with its defaults, no `rustfmt.toml`
