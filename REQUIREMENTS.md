@@ -384,7 +384,7 @@ the profile by hand names it: `Resume=tuned-adm profile balanced`.
   than the start. An announce that ran before the restart is gone.
 - The settings are in one file, `/etc/drowse.conf`, in the form of the
   files of systemd: the sections of the stages (`[IdleBattery]`,
-  `[IdleBattery-1]`, …, `[IdleAC]`, …), then `Key=value`. There are no drop-ins. With no file, the defaults apply.
+  `[IdleBattery-1]`, …, `[IdleAC]`, …), then `Key=value`. There are no drop-ins. With no file, the defaults apply. The package installs it with every key and its default in comments.
 - A unit `drowsed-config.path` watches `/etc/drowse.conf`; on a change
   it runs `systemctl try-restart drowsed.service`.
 - `drowsed.service`, `drowsed-config.path` and `drowsed-resume.service`

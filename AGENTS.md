@@ -148,7 +148,11 @@ RULE layout.notes = notes/<question>.md, one file per question; a fact is
      cited with its source
 RULE layout.system : the files of the system are in a directory by
      where they go: `dbus/` the policy of D-Bus, `systemd/` the units,
-     `preset/` the preset; each file named as it is installed
+     `preset/` the preset, `etc/` the settings file, `waybar/` the
+     module of waybar; each file named as it is installed
+RULE settings.file : etc/drowse.conf is every key with its default, in
+     comments; a test checks it gives the defaults
+THEN a change of a default changes etc/drowse.conf in the same commit
 EX+  dbus/io.github.noktoborus.Drowse.conf, systemd/drowsed.service,
      preset/50-drowse.preset
 RULE license = MIT (LICENSE); every crate it takes allows it
