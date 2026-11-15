@@ -151,6 +151,7 @@ RULE layout.system : the files of the system are in a directory by
      `preset/` the preset; each file named as it is installed
 EX+  dbus/io.github.noktoborus.Drowse.conf, systemd/drowsed.service,
      preset/50-drowse.preset
+RULE license = MIT (LICENSE); every crate it takes allows it
 RULE layout.plans : the work put off is on the branch `plans`, a history
      of its own; one file a subject; main carries no plan
 RULE plans.questions : an open question in `plans` has a number `Q<n>`,
