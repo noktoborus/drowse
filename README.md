@@ -140,7 +140,8 @@ drowse-inhibit -- emerge -uDN @world
 
 The inhibitor ends with the command; its exit code is that of the
 command. As root (`sudo drowse-inhibit -- emerge ...`) the inhibitor is
-of uid 0: the module of waybar shows it as `other`, not `own`.
+of uid 0; the module of waybar shows it as `own` too, as it shows the
+inhibitors of `drowse-inhibit` of root.
 
 ### KillUserProcesses=yes (recommended)
 
@@ -176,10 +177,11 @@ it was taken; with `no` it outlives the logout.
 
 `drowse-status --waybar --follow` writes one line of JSON at each change,
 and as the time left runs; waybar needs no `interval`. A click takes or
-lets go the inhibitor of `drowse-inhibit`. The module shows the icon
+lets go the inhibitor of `drowse-inhibit on`; it does not touch one of
+`drowse-inhibit -- <command>`, which the tooltip shows as
+`until <command>`. The module shows the icon
 only, in the middle of a width that does not change; the time left and
-what holds the system are in the tooltip. For the time on the bar too,
-take `"format": "{icon} {text}"` and a width of 12.
+what holds the system are in the tooltip.
 
 The package puts the module in `/etc/xdg/waybar/drowse.jsonc` and its
 colours in `/etc/xdg/waybar/drowse.css`. In the config of waybar:
@@ -212,13 +214,14 @@ The module, as the file has it:
         "other": "🔒",
         "session-other": "👤",
         "idle": "🌙",
+        "session-own": "🖥",
         "active": ""
     },
     "on-click": "drowse-inhibit toggle"
 }
 ```
 
-With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announced` nf-md-alarm, `own` nf-md-coffee, `other` nf-md-lock, `session-other` nf-md-account, `idle` nf-md-sleep):
+With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announced` nf-md-alarm, `own` nf-md-coffee, `other` nf-md-lock, `session-other` nf-md-account, `idle` nf-md-sleep, `session-own` nf-md-monitor):
 
 ```json
     "format-icons": {
@@ -228,6 +231,7 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
         "other": "󰌾",
         "session-other": "󰀄",
         "idle": "󰒲",
+        "session-own": "󰍹",
         "active": ""
     },
 ```
