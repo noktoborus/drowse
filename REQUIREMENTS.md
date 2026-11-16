@@ -81,10 +81,29 @@ times of the screen off and of the lock, on battery or on AC.
 
 The actions come in stages, one after another, while the system stays
 idle. A stage has a count of idle (`IdleTime`), an announce
-(`Countdown`), an action (`Action`) and may have its undo (`Resume`).
-The first stage is `[IdleBattery]` or `[IdleAC]`, by the power source;
-the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, … (see
-"Settings").
+(`Countdown`), and may have an action (`Action`) and its undo
+(`Resume`). The first stage is `[IdleBattery]` or `[IdleAC]`, by the
+power source; the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, …
+(see "Settings").
+
+A stage is entered and left:
+
+- A stage is entered when its time comes: its `IdleTime` and its
+  `Countdown` after the start of the idle state (the first stage), or
+  after the entry into the stage before (the next ones).
+- To enter a stage is to do its `Action`, and to wait for its end. A
+  stage with no `Action` is entered with nothing done. An `Action` that
+  fails or is killed is a failed entry: the stage has no `Resume` to run.
+  The next stage counts its time from that entry all the same.
+- To leave a stage is to run its `Resume`, when the stage was entered
+  and has one, and to wait for its end. A stage is left before the next
+  one is entered, and on activity. A `Resume` that fails or is killed is
+  a warning in the journal; the next stage is entered all the same.
+- One stage at most is entered at a time, and one job runs at a time: no
+  `Action` starts while an `Action` or a `Resume` runs. A job that
+  started runs to its end.
+- The last stage stays entered while the system is idle; it is left on
+  activity.
 
 1. The system becomes idle. The service publishes the action of the
    first stage with its time.
@@ -93,11 +112,15 @@ the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, … (see
    countdown ends: `Countdown` after the moment the announce really
    started. So the announce runs in full even when the service was
    stopped for a while (`SIGSTOP`, a freeze of its cgroup) and starts
-   late. With `Countdown=Never` there is no announce.
-3. Any activity before that time cancels the action: the `Resume` of the
-   stages that ran runs, and the count starts anew at the first stage.
-4. Else the service does the action of the stage, and the next stage
-   counts its `IdleTime` from the start of this action.
+   late. With `Countdown=Never` there is no announce. The stage entered
+   before stays entered during the announce.
+3. Any activity before that time cancels the entry: the stage entered is
+   left, and the count starts anew at the first stage.
+4. Else the stage entered before is left, and the service waits for its
+   `Resume`; the state stays `announced` meanwhile. Then the service
+   reads logind again: with no activity since the time of the entry, it
+   enters the stage, and the next stage counts its `IdleTime` from this
+   entry. Activity in that wait cancels the entry, as in 3.
 5. After the last stage the service does nothing more until the system
    is active and idle again.
 
@@ -116,7 +139,7 @@ the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, … (see
 ### The power source changes
 
 - A change of the power source is activity: a running announce is
-  cancelled, the `Resume` of the stages that ran runs, and the count
+  cancelled, the stage entered is left, and the count
   starts anew from that moment by the stages of the other power source.
   The power that goes and comes back again and again (a bad cable) has
   no rule of its own: each change is activity.
@@ -127,7 +150,8 @@ the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, … (see
 - `Action` is an action of logind or a command. `ActionHint` is the name
   of the action that the bus and the panel show; with none, they show
   `Action` as it is.
-- The default action: `poweroff`.
+- A stage has no default action: with no `Action` it is entered with
+  nothing done.
 - Just before the action, the service reads the sessions and the
   inhibitors from logind again (`ListSessionsEx()`, `BlockInhibited`,
   `BlockWeakInhibited`), not from what it keeps from the signals.
@@ -154,20 +178,22 @@ the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, … (see
   (`TimeoutStopSec=5s`). Past it systemd kills it: a warning in the
   journal; an `Action` killed so has no `Resume`. A long task does not
   belong in a stage.
-- `Resume` runs always when the action of its stage has run: on activity,
-  an inhibitor let go, a change of the power source, a stop of the
-  service, a sleep. The last stage first. The service keeps a queue of
+- A stage with no `Action` but a `Resume` has a unit too: its start
+  runs nothing, its stop the `Resume`.
+- `Resume` runs always when the stage was entered: before the next stage
+  is entered, on activity, an inhibitor let go, a change of the power
+  source, a stop of the service, a sleep. The service keeps a queue of
   jobs for each unit: a start, then a stop, one at a time, the next when
   the one before has ended (`JobRemoved` of systemd). So a stop never
-  cuts a start that runs. The queues of different units do not wait for
-  each other. A stop that waits for a command that still runs is a
-  warning in the journal.
+  cuts a start that runs. An entry waits until no job of any unit runs.
+  A stop that waits for a command that still runs is a warning in the
+  journal.
 - When logind refuses the action, or the unit of a command cannot be
   started, the service writes the refusal to the journal, with the
   answer (for a sleep, the error `SleepVerbNotSupported` and its text:
   disabled by the settings, not in the kernel, no place to resume from).
-  It is not a stop and not a state: the next stage comes as if the
-  action had run.
+  It is a failed entry, not a stop and not a state: the next stage
+  comes as if the action had run.
 - At its stop (a sleep, `systemctl stop`, a restart) the service waits
   for the commands that run, stops every unit of a stage that ran (so
   their `Resume` runs), then exits: at most 10 s
@@ -329,15 +355,15 @@ writes a warning and goes on: they are one section, the keys of both
 apply, the later one wins.
 
 Each key may be in each section; a key that is not there takes its
-default. The defaults are for the first stage; a further stage has no
-default `Action`: with none, it is not a stage. The default `IdleTime`
-is `Never`: with no settings file the service does nothing.
+default, the same in every stage. `Action` has no default: a stage with
+none is entered with nothing done. The default `IdleTime` is `Never`:
+with no settings file the service does nothing.
 
 | Key | Meaning | Default in `[IdleBattery]` | Default in `[IdleAC]` |
 |---|---|---|---|
-| `IdleTime` | idle time before the announce: a time or `Never` (no announce, no action). For a further stage, counted from the start of the action before it | `Never` | `Never` |
+| `IdleTime` | idle time before the announce: a time or `Never` (no announce, no entry). For a further stage, counted from the entry into the stage before it | `Never` | `Never` |
 | `Countdown` | how long the announce runs before the action: a time or `Never` (no announce: the action comes at `IdleTime`). It is added to `IdleTime`: with `IdleTime=15m` and `Countdown=2m` the announce starts at 15 min of idle, the action comes at 17 min | `2m` | `2m` |
-| `Action` | an action of logind, or a command | `poweroff` | `poweroff` |
+| `Action` | an action of logind, or a command; with none, the stage is entered with nothing done | none | none |
 | `ActionHint` | the name of the action that the bus and the panel show; with none, they show `Action` as it is | none | none |
 | `Resume` | a command that undoes `Action` when the system is active again; for a command only | none | none |
 
@@ -367,10 +393,12 @@ Action=poweroff
 IdleTime=Never
 ```
 
-On battery: at once the profile of tuned is power save; at 5 min the
-radio is off; 30 min later the announce, and 2 min after it `poweroff`.
-When the user comes back: the radio is on, then tuned picks its profile
-again. On AC: nothing.
+On battery: at once the profile of tuned is power save; at 5 min tuned
+picks its profile again (the power save is left), then the radio is off;
+30 min later the announce, and 2 min after it the radio is on again and
+the system powers off. When the user comes back while a stage is
+entered, only that stage is left: the profile of tuned comes back, or
+the radio is on. On AC: nothing.
 
 `tuned-adm` has no command to go back to the profile before;
 `auto_profile` goes back to the profile it recommends. A user who picks
