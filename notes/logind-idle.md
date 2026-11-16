@@ -75,6 +75,31 @@ known ahead: only a read shows it.
 `hibernate`, `hybrid-sleep`, `suspend-then-hibernate`, `sleep`,
 `factory-reset`, `lock`, `secure-attention-key`.
 
+## The idle hint of a graphical session
+
+Read on 2026-11-16 in systemd 261.2.
+
+- Only the owner of the session or root sets it: "Only owner of session
+  may set idle hint" (`method_set_idle_hint()`,
+  `src/login/logind-session-dbus.c:290`).
+- Only a graphical session of a class that can idle takes it; else
+  `ENOTTY`, on the bus "Idle hint control is not supported on
+  non-graphical and non-user sessions" (`session_set_idle_hint()`,
+  `src/login/logind-session.c:1219`). A console or ssh cannot set it.
+- The time of the hint (`IdleSinceHint`) changes only when the value
+  changes: `if (s->idle_hint == b) return 0;` (the same function). A
+  session starts with the hint false and no time, and the first
+  `SetIdleHint(false)` of swayidle changes nothing.
+- So a graphical session with the hint false and `IdleSinceHint` 0 has
+  never been idle: no helper sets its hint, or nobody left it idle since
+  the login. Once idle once, a session with a helper has a time. This
+  tells a session with no helper apart, after its first idle only
+  (`session_get_idle_hint()`, `src/login/logind-session.c:1160`).
+- By hand, from the session itself:
+  `busctl call org.freedesktop.login1 /org/freedesktop/login1/session/auto
+  org.freedesktop.login1.Session SetIdleHint b true`; for another
+  session, its path (`…/session/_31` for the id 1).
+
 ## For the service
 
 - The idle state of the service is that of logind.

@@ -38,6 +38,27 @@ screen off? Is `idlehint` on by default? Read in the source of swayidle
   not read `BlockWeakInhibited`, and does not see an inhibitor taken
   before it starts (notes/sway-inhibitors.md).
 
+## Idle now, and the other way of a hint
+
+Read on 2026-11-16 in swayidle 1.9.0.
+
+- `SIGUSR1`: idle at once. Every timeout is registered again with the
+  time 0, not obeying inhibitors (`handle_signal()`, `main.c:905`); with
+  `idlehint`, the hint is true at once. Input sends `resumed` again.
+- A hint set by commands instead of `idlehint`
+  (`timeout N 'busctl … SetIdleHint b true' resume 'busctl … b false'`)
+  works on idle and on input (`handle_idled()`, `handle_resumed()`,
+  `main.c:634-663`), but loses what `idlehint` does: false at the start
+  (`main.c:1142`), at an unlock (`main.c:299`), after a sleep
+  (`main.c:330`), and when an inhibitor of `idle` turns the timeouts off:
+  `disable_timeouts()` (`main.c:617`) drops the timers with no `resume`
+  command, so such a hint stays true.
+- `before-sleep` or `after-resume` makes swayidle hold an inhibitor of
+  `sleep`, mode `delay` (`main.c:488`, `main.c:294`), "Swayidle is
+  preventing sleep": it runs the command (`swaylock` of the image) before
+  the sleep (`main.c:304-309`). A `delay` inhibitor does not hold the
+  idle state of the service.
+
 ## The screen
 
 - `timeout <s> <command> resume <command>`: one time per timeout, no power
