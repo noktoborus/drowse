@@ -19,15 +19,25 @@ fn no_file_is_the_defaults() {
 }
 
 #[test]
-fn defaults() {
+fn defaults_do_nothing() {
     let (settings, warnings) = parse("");
     assert!(warnings.is_empty());
     let battery = settings.stages(Power::Battery);
     assert_eq!(battery.len(), 1);
-    assert_eq!(battery[0].idle_time, minutes(15));
+    assert_eq!(battery[0].idle_time, Span::Never);
     assert_eq!(battery[0].countdown, minutes(2));
     assert_eq!(battery[0].action, Action::Logind(LogindAction::Poweroff));
-    assert_eq!(settings.stages(Power::Ac)[0].idle_time, minutes(60));
+    assert_eq!(settings.stages(Power::Ac)[0].idle_time, Span::Never);
+}
+
+#[test]
+fn an_idle_time_alone_powers_off() {
+    let (settings, warnings) = parse("[IdleBattery]\nIdleTime=20m\n");
+    assert!(warnings.is_empty());
+    let first = &settings.stages(Power::Battery)[0];
+    assert_eq!(first.idle_time, minutes(20));
+    assert_eq!(first.countdown, minutes(2));
+    assert_eq!(first.action, Action::Logind(LogindAction::Poweroff));
 }
 
 #[test]
@@ -89,7 +99,7 @@ fn a_command_with_no_hint_shows_its_line() {
 fn a_wrong_value_takes_its_default() {
     let (settings, warnings) = parse("[IdleBattery]\nIdleTime=soon\nCountdown=1x\n");
     let first = &settings.stages(Power::Battery)[0];
-    assert_eq!(first.idle_time, minutes(15));
+    assert_eq!(first.idle_time, Span::Never);
     assert_eq!(first.countdown, minutes(2));
     assert_eq!(warnings.len(), 2);
     assert!(matches!(&warnings[0], Warning::WrongValue { key, .. } if key == "IdleTime"));
@@ -220,8 +230,27 @@ fn the_classes_of_the_sessions() {
 }
 
 #[test]
-fn the_file_of_the_package_is_the_defaults() {
+fn the_file_of_the_package() {
     let (settings, warnings) = parse(include_str!("../../etc/drowse.conf"));
     assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(settings, Settings::default());
+    let battery = settings.stages(Power::Battery);
+    assert_eq!(battery.len(), 2);
+    assert_eq!(battery[0].idle_time, minutes(10));
+    assert_eq!(battery[0].countdown, Span::Never);
+    assert_eq!(
+        battery[0].action,
+        Action::Command(command("tuned-adm profile drowse-cm5-powersave"))
+    );
+    assert_eq!(battery[0].shown_name(), "power save");
+    assert_eq!(
+        battery[0].resume,
+        Some(command("systemctl try-restart tuned-ppd.service"))
+    );
+    assert_eq!(battery[1].idle_time, minutes(38));
+    assert_eq!(battery[1].countdown, minutes(2));
+    assert_eq!(battery[1].action, Action::Logind(LogindAction::Poweroff));
+    let ac = settings.stages(Power::Ac);
+    assert_eq!(ac.len(), 1);
+    assert_eq!(ac[0].idle_time, Span::Never);
+    assert!(settings.counts_class("greeter"));
 }

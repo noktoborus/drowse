@@ -149,9 +149,16 @@ RULE layout.system : the files of the system are in a directory by
      where they go: `dbus/` the policy of D-Bus, `systemd/` the units,
      `preset/` the preset, `etc/` the settings file, `waybar/` the
      module of waybar; each file named as it is installed
-RULE settings.file : etc/drowse.conf is every key with its default, in
-     comments; a test checks it gives the defaults
-THEN a change of a default changes etc/drowse.conf in the same commit
+RULE layout.examples = examples/, files the user copies by hand; the
+     package installs them with the documentation, never in the system
+EX+  examples/tuned/drowse-cm5-powersave/tuned.conf
+RULE settings.file : etc/drowse.conf is the stages the package gives, and
+     every other key with its default, in comments; a test checks it reads
+     with no warning and gives those stages
+WHY  with no file the service does nothing (`IdleTime=Never`); the policy
+     is in the file, where the user sees and changes it
+THEN a change of a default or of a stage of the file changes
+     etc/drowse.conf and its test in the same commit
 EX+  dbus/io.github.noktoborus.Drowse.conf, systemd/drowsed.service,
      preset/50-drowse.preset
 RULE license = MIT (LICENSE); every crate it takes allows it

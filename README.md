@@ -53,6 +53,36 @@ not one of mode `block`.
 
 ### The action
 
+With no `/etc/drowse.conf` the service does nothing: the default
+`IdleTime` is `Never`. The file of the package sets, on battery, the
+power save at 10 min of idle and `poweroff` at 50 min; on AC nothing.
+
+The power save is the profile of TuneD `drowse-cm5-powersave`:
+`powersave`, the CPU at 800 MHz at most, and USB autosuspend on every
+device but those of `KEEP` in `usb-autosuspend.sh`: `434b:5543`, the
+keyboard of the uConsole, and `1eaf:*`, its bootloader. The hubs these hang on, up to
+the root hub, are set to never suspend. The script writes the values
+before back when the profile ends. The package gives it as an
+example only (`examples/tuned/`, installed with the documentation);
+copy it to the profiles of TuneD:
+
+```
+cp -r /usr/share/doc/drowse-*/examples/tuned/drowse-cm5-powersave \
+    /etc/tuned/profiles/
+```
+
+With no such profile the power save fails, and the `poweroff` still
+comes. It needs:
+
+- tuned with tuned-ppd. tuned-ppd keeps the profile the user chose, and
+  `systemctl try-restart tuned-ppd.service` (the `Resume`) sets it
+  again. With tuned and no tuned-ppd, set `Resume=tuned-adm profile
+  <the profile>`. With no tuned the power save fails, and the `poweroff`
+  still comes.
+- `arm_freq_min=800` or lower in `config.txt`. cpufreq keeps the limit
+  inside the range of the firmware, and the default lowest of the CM5 is
+  1500 MHz.
+
 The default action is `poweroff`: it works on any device. A sleep needs
 the kernel and the system set up for it (`CONFIG_SUSPEND`, a place to
 resume from for `hibernate`); the uConsole with a CM5 has no suspend.

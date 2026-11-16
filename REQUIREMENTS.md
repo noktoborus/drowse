@@ -330,11 +330,12 @@ apply, the later one wins.
 
 Each key may be in each section; a key that is not there takes its
 default. The defaults are for the first stage; a further stage has no
-default `Action`: with none, it is not a stage.
+default `Action`: with none, it is not a stage. The default `IdleTime`
+is `Never`: with no settings file the service does nothing.
 
 | Key | Meaning | Default in `[IdleBattery]` | Default in `[IdleAC]` |
 |---|---|---|---|
-| `IdleTime` | idle time before the announce: a time or `Never` (no announce, no action). For a further stage, counted from the start of the action before it | `15m` | `60m` |
+| `IdleTime` | idle time before the announce: a time or `Never` (no announce, no action). For a further stage, counted from the start of the action before it | `Never` | `Never` |
 | `Countdown` | how long the announce runs before the action: a time or `Never` (no announce: the action comes at `IdleTime`). It is added to `IdleTime`: with `IdleTime=15m` and `Countdown=2m` the announce starts at 15 min of idle, the action comes at 17 min | `2m` | `2m` |
 | `Action` | an action of logind, or a command | `poweroff` | `poweroff` |
 | `ActionHint` | the name of the action that the bus and the panel show; with none, they show `Action` as it is | none | none |
@@ -406,7 +407,25 @@ The section `[Sessions]`, one key:
 - The settings are in one file, `/etc/drowse.conf`, in the form of the
   files of systemd: `[Sessions]` and the sections of the stages
   (`[IdleBattery]`, `[IdleBattery-1]`, …, `[IdleAC]`, …), then
-  `Key=value`. There are no drop-ins. With no file, the defaults apply. The package installs it with every key and its default in comments.
+  `Key=value`. There are no drop-ins. With no file, the defaults apply:
+  nothing is done.
+- The package installs the file with its stages: on battery
+  `tuned-adm profile drowse-cm5-powersave` at 10 min of idle (no
+  announce, `Resume=systemctl try-restart tuned-ppd.service`), then
+  `poweroff` 38 min later with an announce of 2 min, at 50 min of idle;
+  on AC nothing. Every other key is there with its default in a comment.
+  With no tuned the first command fails, and the `poweroff` still comes.
+- The package gives the profile of TuneD `drowse-cm5-powersave` as an
+  example (`examples/tuned/`, installed with the documentation, not as
+  a profile): `powersave`, the CPU at 800 MHz at most, and USB
+  autosuspend on every device but those of `KEEP` of
+  `usb-autosuspend.sh` (the keyboard `434b:5543` and its bootloader
+  `1eaf:*`) and the
+  hubs they hang on, which never suspend.
+  The user copies it to `/etc/tuned/profiles/`. It is not in
+  `ppd.conf` of tuned-ppd: tuned-ppd then keeps its base profile, the
+  one the user chose, and sets it again at its restart
+  (`initialize()` of `tuned/ppd/controller.py`).
 - A unit `drowsed-config.path` watches `/etc/drowse.conf`; on a change
   it runs `systemctl try-restart drowsed.service`.
 - `drowsed.service`, `drowsed-config.path` and `drowsed-resume.service`

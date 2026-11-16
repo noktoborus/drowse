@@ -295,10 +295,7 @@ async fn drowsed_and_drowse_status_on_a_bus() {
     .unwrap();
     let line = String::from_utf8(status.stdout).unwrap();
     assert!(status.status.success(), "{line}");
-    assert!(
-        line.starts_with("{\"text\":\"17 min\",\"alt\":\"idle\""),
-        "{line}"
-    );
+    assert!(line.contains("\"alt\":\"idle\""), "{line}");
     let _ = Command::new("kill")
         .args(["-TERM", &drowsed.id().to_string()])
         .status();

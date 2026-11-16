@@ -50,14 +50,6 @@ impl Power {
             Self::Ac => "ac",
         }
     }
-
-    /// The default idle time of its first stage.
-    fn default_idle_time(self) -> Duration {
-        match self {
-            Self::Battery => Duration::from_secs(15 * 60),
-            Self::Ac => Duration::from_secs(60 * 60),
-        }
-    }
 }
 
 /// The default time of the announce.
@@ -93,10 +85,11 @@ impl Stage {
             .unwrap_or_else(|| self.action.as_written())
     }
 
-    /// A first stage with only its defaults.
-    fn default_for(power: Power) -> Self {
+    /// A first stage with only its defaults: `IdleTime=Never`, so with
+    /// no settings file the service does nothing.
+    fn default_for(_power: Power) -> Self {
         Self {
-            idle_time: Span::Time(power.default_idle_time()),
+            idle_time: Span::Never,
             countdown: Span::Time(DEFAULT_COUNTDOWN),
             action: Action::Logind(DEFAULT_ACTION),
             hint: None,
