@@ -87,8 +87,7 @@ RULE unix.calls = `rustix`; never `libc` itself, never `nix`
 THEN a call `rustix` lacks is taken from std or tokio
 EX+  rustix::process::kill_process_group(pgid, Signal::TERM)
 EX+  `tokio::signal` for SIGTERM
-EX+  `std::process::Command` with `process_group(0)` for the child of
-     `drowse-inhibit`
+EX+  rustix::process::setsid() for the holder of `drowse-inhibit on`
 EX-  nix::unistd::fork(), unsafe { libc::kill(pid, libc::SIGTERM) }
 
 ## Errors

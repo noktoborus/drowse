@@ -81,7 +81,28 @@ the policy of D-Bus of the package. Others see the state with no list.
 drowsed does not count a session that is closing. So what a user leaves
 running after the logout (a build, a download, tmux) does not hold the
 system up. Hold it by an inhibitor: `drowse-inhibit on`, or
-`systemd-inhibit --what=sleep:shutdown <command>`.
+`drowse-inhibit -- <command>` while the command runs.
+
+### drowse-inhibit and polkit
+
+`drowse-inhibit` takes an inhibitor of `sleep:shutdown` from logind. In a
+local session polkit gives it with no password. From ssh polkit asks the
+password of an admin. On a terminal the tool runs `pkttyagent` (of
+polkit), and the password is typed there. With no `pkttyagent`, or with
+no terminal, the inhibitor from ssh is refused. Root is never asked: the
+tool then starts no agent.
+
+### A long command: emerge
+
+Hold the system up while the command runs:
+
+```
+drowse-inhibit -- emerge -uDN @world
+```
+
+The inhibitor ends with the command; its exit code is that of the
+command. As root (`sudo drowse-inhibit -- emerge ...`) the inhibitor is
+of uid 0: the module of waybar shows it as `other`, not `own`.
 
 ### KillUserProcesses=yes (recommended)
 
