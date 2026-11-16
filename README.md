@@ -54,7 +54,8 @@ not one of mode `block`.
 ### The action
 
 With no `/etc/drowse.conf` the service does nothing: the default
-`IdleTime` is `Never`. The file of the package sets, on battery, the
+`IdleTime` is `Never`. The file as the package gives it stays in
+`/usr/share/drowse/drowse.conf`, to compare with or to take again. The file of the package sets, on battery, the
 power save at 10 min of idle and `poweroff` at 50 min; on AC nothing.
 
 The power save is the profile of TuneD `drowse-cm5-powersave`:
