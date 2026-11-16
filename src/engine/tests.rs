@@ -223,6 +223,22 @@ fn closing_and_background_sessions_do_not_count() {
 }
 
 #[test]
+fn a_greeter_counts_unless_left_out() {
+    let mut greeter = session("2", false, 0);
+    greeter.class = "greeter".to_owned();
+    let snapshot = Snapshot {
+        sessions: vec![session("1", true, 0), greeter],
+        inhibitors: Vec::new(),
+    };
+    let mut by_default = engine("", PowerSource::Battery);
+    by_default.on_snapshot(0, snapshot.clone());
+    assert_eq!(by_default.view().state, State::Active);
+    let mut no_greeter = engine("[Sessions]\nClasses=user\n", PowerSource::Battery);
+    no_greeter.on_snapshot(0, snapshot);
+    assert_eq!(no_greeter.view().state, State::Idle);
+}
+
+#[test]
 fn a_session_in_use_that_leaves_is_activity() {
     let mut engine = engine("", PowerSource::Battery);
     let two = Snapshot {

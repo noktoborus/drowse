@@ -202,6 +202,24 @@ fn sections_that_are_not_of_a_stage() {
 }
 
 #[test]
+fn the_classes_of_the_sessions() {
+    assert!(Settings::default().counts_class("user"));
+    assert!(Settings::default().counts_class("greeter"));
+    assert!(!Settings::default().counts_class("background"));
+    let (settings, warnings) = parse("[Sessions]\nClasses=user background\nIdle=1\n");
+    assert!(settings.counts_class("background"));
+    assert!(!settings.counts_class("greeter"));
+    assert_eq!(
+        warnings,
+        [Warning::UnknownKey {
+            section: "Sessions".to_owned(),
+            key: "Idle".to_owned(),
+            line: 3,
+        }]
+    );
+}
+
+#[test]
 fn the_file_of_the_package_is_the_defaults() {
     let (settings, warnings) = parse(include_str!("../../etc/drowse.conf"));
     assert!(warnings.is_empty(), "{warnings:?}");

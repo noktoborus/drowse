@@ -34,8 +34,8 @@ WHY  with nobody logged in, or with two users, there is no one user to
      take the settings from
 RULE idle.source = the sessions of logind and its inhibitors of `idle`,
      `sleep` and `shutdown`, whatever the action is; a session in the
-     state `closing` is left out; the service counts no activity of its
-     own
+     state `closing` is left out; a session of a class not in `Classes=`
+     is left out; the service counts no activity of its own
 WHY  logind counts every session alike: sway, a console, ssh; but it also
      counts a `closing` session, whose idle state nobody updates
 REF  notes/logind-idle.md, notes/session-end.md

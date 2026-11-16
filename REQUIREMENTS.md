@@ -12,7 +12,8 @@ source.
   whatever `Action` is. Such an inhibitor counts as activity. Sessions
   of all kinds count alike: a graphical one, a console, ssh. A session
   in the state `closing` is left out: after a logout nobody updates its
-  idle state (notes/session-end.md). The service works this out itself from the
+  idle state (notes/session-end.md). A session of a class not in
+  `Classes=` of `[Sessions]` is left out (see "Settings"). The service works this out itself from the
   sessions (`ListSessionsEx()`, the state of each), not from `IdleHint`
   of the Manager, which counts `closing` sessions too.
 - **The start of the idle state**: the latest start of idle of the
@@ -374,6 +375,26 @@ again. On AC: nothing.
 `auto_profile` goes back to the profile it recommends. A user who picks
 the profile by hand names it: `Resume=tuned-adm profile balanced`.
 
+### The sessions that count
+
+The section `[Sessions]`, one key:
+
+| Key | Meaning | Default |
+|---|---|---|
+| `Classes` | the classes of logind of the sessions that count in the idle state, split by spaces; a session of another class is left out; empty leaves out all | `user user-early user-light user-early-light greeter` |
+
+- A name is compared with the class of a session as it is. Any name is
+  taken, unchecked, so a class of a newer logind can be named.
+- The default is the classes logind counts itself
+  (`SESSION_CLASS_CAN_IDLE`, notes/logind-idle.md).
+- A login screen (`greeter`) that sets no idle hint is never idle and
+  keeps the system up while it is shown. `Classes=user user-early
+  user-light user-early-light` leaves it out: with nobody logged in, the
+  system is then idle.
+- The settings file says how to list the classes logind knows
+  (`varlinkctl introspect`) and the class of each session
+  (`loginctl list-sessions`).
+
 ### A change of the settings
 
 - The service does not read its settings again while it runs; it is
@@ -383,8 +404,9 @@ the profile by hand names it: `Resume=tuned-adm profile balanced`.
 - At the start the count starts anew: the idle state starts no sooner
   than the start. An announce that ran before the restart is gone.
 - The settings are in one file, `/etc/drowse.conf`, in the form of the
-  files of systemd: the sections of the stages (`[IdleBattery]`,
-  `[IdleBattery-1]`, …, `[IdleAC]`, …), then `Key=value`. There are no drop-ins. With no file, the defaults apply. The package installs it with every key and its default in comments.
+  files of systemd: `[Sessions]` and the sections of the stages
+  (`[IdleBattery]`, `[IdleBattery-1]`, …, `[IdleAC]`, …), then
+  `Key=value`. There are no drop-ins. With no file, the defaults apply. The package installs it with every key and its default in comments.
 - A unit `drowsed-config.path` watches `/etc/drowse.conf`; on a change
   it runs `systemctl try-restart drowsed.service`.
 - `drowsed.service`, `drowsed-config.path` and `drowsed-resume.service`

@@ -21,6 +21,14 @@ exec swayidle idlehint 1
 
 Other lines of swayidle (the screen off, the lock) are as you like.
 
+### The login screen
+
+A login screen (a session of class `greeter`) counts, as for logind. If
+it sets no idle hint, it is never idle, and the system stays up while it
+is shown. Run swayidle with `idlehint` in its sway, or leave `greeter`
+out of `Classes=` of `[Sessions]`: then with nobody logged in the system
+is idle.
+
 ### logind: IdleAction=ignore
 
 Keep `IdleAction=ignore` (the default): the service does the action, not
