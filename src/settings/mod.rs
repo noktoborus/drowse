@@ -7,6 +7,7 @@ pub mod sessions;
 mod syntax;
 pub mod time;
 pub mod warning;
+pub mod yaml;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
