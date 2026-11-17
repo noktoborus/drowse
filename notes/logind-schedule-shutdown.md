@@ -42,7 +42,7 @@ what `shutdown -h +5` and `systemctl poweroff --when=` call.
    it runs. At the time the handler only waits for `delay` inhibitors
    (`bus_manager_shutdown_or_sleep_now_or_later()`). An inhibitor taken
    during the count, by `drowse-inhibit` for one, does not stop it.
-4. logind does the action, not the service: no stages, no `Resume`.
+4. logind does the action, not the service: no chain, no `leave`.
 5. `wall` is on by default; the service writes no `wall`.
 
 ## What there is not

@@ -13,8 +13,8 @@ READ   RULE is binding. WHY is context, not negotiable. EX is literal.
 
 ## Project
 
-RULE product = drowse: `drowsed`, a system service of systemd that does
-     the actions of its stages (an action of power, a command) while every
+RULE product = drowse: `drowsed`, a system service of systemd that enters
+     its sections (a command, or an action of power) while every
      session is idle; `drowse-inhibit` and `drowse-status`, the tools of
      the user
 RULE names : no prefix `systemd-` in the names of the programs, the units,
@@ -34,7 +34,8 @@ WHY  with nobody logged in, or with two users, there is no one user to
      take the settings from
 RULE idle.source = the sessions of logind and its inhibitors of `idle`,
      `sleep` and `shutdown`, whatever the action is; a session in the
-     state `closing` is left out; a session of a class not in `Classes=`
+     state `closing` is left out; a session of a class not in
+     `sessions.classes`
      is left out; the service counts no activity of its own
 WHY  logind counts every session alike: sway, a console, ssh; but it also
      counts a `closing` session, whose idle state nobody updates
@@ -155,13 +156,12 @@ RULE layout.examples = examples/, files the user copies by hand; the
 EXC  a packager may install the profile of TuneD as a profile, by a
      choice of the user that is off by default; the user asked for it
 EX+  examples/tuned/cm5-powersave/tuned.conf
-RULE settings.file : etc/drowse.conf is the stages the package gives, and
-     every other key with its default, in comments; a test checks it reads
-     with no warning and gives those stages
-WHY  with no file the service does nothing (`IdleTime=Never`); the policy
+RULE settings.file : etc/drowse.yaml gives the chains of the package; a
+     test checks it reads and gives those chains
+WHY  with no chains the service does nothing; the policy
      is in the file, where the user sees and changes it
-THEN a change of a default or of a stage of the file changes
-     etc/drowse.conf and its test in the same commit
+THEN a change of the file changes etc/drowse.yaml and its test in the
+     same commit
 EX+  dbus/io.github.noktoborus.Drowse.conf, systemd/drowsed.service,
      preset/50-drowse.preset
 RULE license = MIT (LICENSE); every crate it takes allows it

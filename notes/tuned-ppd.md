@@ -2,8 +2,8 @@
 
 ## Question
 
-A stage sets a profile of TuneD for the idle state and gives it back at
-its `Resume`. How does tuned-ppd take a profile set from outside, and how
+A section sets a profile of TuneD for the idle state and gives it back at
+its `leave`. How does tuned-ppd take a profile set from outside, and how
 is the profile the user chose given back? Which profiles touch the power
 save of Wi-Fi? Read on 2026-11-16 in tuned, branch main, commit
 `94f85fe` of 2026-11-15 (github.com/redhat-performance/tuned).
@@ -69,8 +69,8 @@ save of Wi-Fi? Read on 2026-11-16 in tuned, branch main, commit
   off`, not the value before (`_wifi_set_power_level()`,
   `profiles/functions`). With no `iw` it does nothing: it falls back to
   `iwpriv` and to `/sys/bus/pci/devices/*/power_level` only.
-- So once `iw` is installed, a stage with a profile that includes
-  `powersave` turns the power save of Wi-Fi off at its `Resume`, until a
+- So once `iw` is installed, a section with a profile that includes
+  `powersave` turns the power save of Wi-Fi off at its `leave`, until a
   reboot (the kernel keeps the value: the note `wifi-cm5.md` of the
   research of the uConsole kernel).
 - `USB_AUTOSUSPEND` is not set by default, so the script of `powersave`
@@ -78,7 +78,7 @@ save of Wi-Fi? Read on 2026-11-16 in tuned, branch main, commit
 
 ## For the service
 
-- A stage with a profile that maps to none of PPD, and `Resume` a restart
+- A section with a profile that maps to none of PPD, and `leave` a restart
   of tuned-ppd, gives back the profile the user chose (the example
   `examples/tuned/cm5-powersave`).
 - The script of `powersave`, included by such a profile, runs too; the

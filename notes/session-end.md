@@ -52,7 +52,7 @@ against `LeaderPIDFDId`. Taken: the monitor (REQUIREMENTS.md).
 
 ## A leaving session and the start of the idle state
 
-Example: on AC, `IdleTime` of `[IdleAC]` = 35 min. Session B is idle
+Example: on AC, `main.ac[0].after` = 35 min. Session B is idle
 since 12:00.
 Session A (sway) is in use; at 12:30 its user logs out and leaves tmux;
 A goes `closing` with its idle hint "not idle".

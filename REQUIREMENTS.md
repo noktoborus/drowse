@@ -1,6 +1,6 @@
 # Requirements
 
-While the system is idle, the service does the actions of its stages,
+While the system is idle, the service enters the sections of its chains,
 one after another: a command and its undo, an action of power. It takes
 the idle state and the inhibitors from logind, and knows the power
 source.
@@ -9,11 +9,11 @@ source.
 
 - **Idle**: every session of logind is idle, and no inhibitor of logind
   of `idle`, `sleep` or `shutdown` (`block` or `block-weak`) is held,
-  whatever `Action` is. Such an inhibitor counts as activity. Sessions
+  whatever the action is. Such an inhibitor counts as activity. Sessions
   of all kinds count alike: a graphical one, a console, ssh. A session
   in the state `closing` is left out: after a logout nobody updates its
   idle state (notes/session-end.md). A session of a class not in
-  `Classes=` of `[Sessions]` is left out (see "Settings"). The service works this out itself from the
+  class not in `sessions.classes` is left out (see "Settings"). The service works this out itself from the
   sessions (`ListSessionsEx()`, the state of each), not from `IdleHint`
   of the Manager, which counts `closing` sessions too.
 - **The start of the idle state**: the latest start of idle of the
@@ -49,8 +49,8 @@ source.
 | Case | The action |
 |---|---|
 | Work in any session (sway, console, ssh) | no |
-| All sessions idle, on battery | by the stages of `[IdleBattery]` |
-| All sessions idle, on AC | by the stages of `[IdleAC]` |
+| All sessions idle, on battery | by `main.battery` |
+| All sessions idle, on AC | by `main.ac` |
 | An ssh connection is open (with a terminal or not) | no |
 | Inhibitor of screen and system | no |
 | Inhibitor of system | no |
@@ -79,50 +79,39 @@ times of the screen off and of the lock, on battery or on AC.
 
 ## The action
 
-The actions come in stages, one after another, while the system stays
-idle. A stage has a count of idle (`IdleTime`), an announce
-(`Countdown`), and may have an action (`Action`) and its undo
-(`Resume`). The first stage is `[IdleBattery]` or `[IdleAC]`, by the
-power source; the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, …
-(see "Settings").
+Each power source has a chain of sections. The service enters one section
+at a time while the system stays idle. A section has `after`,
+`countdown`, and either a command (`enter`, `leave`), a logind action
+(`action`), or neither. The chains are in `/etc/drowse.yaml` (see
+"Settings").
 
-A stage is entered and left:
-
-- A stage is entered when its time comes: its `IdleTime` and its
-  `Countdown` after the start of the idle state (the first stage), or
-  after the entry into the stage before (the next ones).
-- To enter a stage is to do its `Action`, and to wait for its end. A
-  stage with no `Action` is entered with nothing done. An `Action` that
-  fails or is killed is a failed entry: the stage has no `Resume` to run.
-  The next stage counts its time from that entry all the same.
-- To leave a stage is to run its `Resume`, when the stage was entered
-  and has one, and to wait for its end. A stage is left before the next
-  one is entered, and on activity. A `Resume` that fails or is killed is
-  a warning in the journal; the next stage is entered all the same.
-- One stage at most is entered at a time, and one job runs at a time: no
-  `Action` starts while an `Action` or a `Resume` runs. A job that
-  started runs to its end.
-- The last stage stays entered while the system is idle; it is left on
+- Entry comes after `after` and `countdown` from the start of idle for
+  the first section, or from the entry into the previous section.
+- A command section runs `enter` on entry and `leave` when it is left.
+  With neither, entry does nothing. A failed or killed `enter` has no
+  `leave`; the next section still counts from that entry.
+- A section is left before the next one is entered, and on activity.
+  A failed or killed `leave` is a warning; the next section is entered
+  all the same.
+- One section at most is entered at a time, and one job runs at a time.
+  A command that started runs to its end.
+- The last section stays entered while the system is idle; it is left on
   activity.
 
-1. The system becomes idle. The service publishes the action of the
-   first stage with its time.
-2. The system has been idle for `IdleTime` of the stage. The service
-   announces: "action X in `Countdown`". The action comes when the
-   countdown ends: `Countdown` after the moment the announce really
-   started. So the announce runs in full even when the service was
-   stopped for a while (`SIGSTOP`, a freeze of its cgroup) and starts
-   late. With `Countdown=Never` there is no announce. The stage entered
-   before stays entered during the announce.
-3. Any activity before that time cancels the entry: the stage entered is
-   left, and the count starts anew at the first stage.
-4. Else the stage entered before is left, and the service waits for its
-   `Resume`; the state stays `announced` meanwhile. Then the service
-   reads logind again: with no activity since the time of the entry, it
-   enters the stage, and the next stage counts its `IdleTime` from this
-   entry. Activity in that wait cancels the entry, as in 3.
-5. After the last stage the service does nothing more until the system
-   is active and idle again.
+1. The system becomes idle. The service publishes the next action and its
+   time.
+2. When `after` passes, the service announces: "action X in
+   `countdown`". Entry comes `countdown` after the announce really
+   starts, so a late announce still runs in full. With `countdown: never`
+   there is no announce. The section before stays entered during it.
+3. Activity before entry cancels it: the entered section is left, and
+   the count starts anew at the first section.
+4. Else the section before is left and the service waits for its `leave`.
+   The state stays `announced` meanwhile. The service then reads logind
+   again. With no activity, it enters the section; the next one counts
+   its `after` from this entry. Activity in that wait cancels entry.
+5. After the last section the service does nothing until the system is
+   active and idle again.
 
 ### An inhibitor of system
 
@@ -131,7 +120,7 @@ A stage is entered and left:
   announce cancels it. The journal gets one line: the inhibitor, who,
   why.
 - When the last one is let go, that moment is activity: the count starts
-  anew from it, at the first stage.
+  anew from it, at the first section.
 - When logind refuses the action as inhibited (`BlockedByInhibitorLock`:
   an inhibitor taken just before the call), the state is `active`, as
   for any inhibitor.
@@ -139,48 +128,46 @@ A stage is entered and left:
 ### The power source changes
 
 - A change of the power source is activity: a running announce is
-  cancelled, the stage entered is left, and the count
-  starts anew from that moment by the stages of the other power source.
+  cancelled, the section entered is left, and the count
+  starts anew from that moment by the chain of the other power source.
   The power that goes and comes back again and again (a bad cable) has
   no rule of its own: each change is activity.
 - The journal gets one line: the power source, and that the times moved.
 
 ### The action itself
 
-- `Action` is an action of logind or a command. `ActionHint` is the name
-  of the action that the bus and the panel show; with none, they show
-  `Action` as it is.
-- A stage has no default action: with no `Action` it is entered with
-  nothing done.
+- `enter` is a command. `action` is an action of logind. `hint` is the
+  name the bus and panel show; by default they show the `enter` command
+  or the logind action as written.
+- A command section has no default command. Without `enter` and `leave`,
+  it is entered with nothing done.
 - Just before the action, the service reads the sessions and the
   inhibitors from logind again (`ListSessionsEx()`, `BlockInhibited`,
   `BlockWeakInhibited`), not from what it keeps from the signals.
 - The action is inhibited when `idle`, `sleep` or `shutdown` is in
-  `BlockInhibited` or `BlockWeakInhibited` of logind, whatever `Action`
+  `BlockInhibited` or `BlockWeakInhibited` of logind, whatever `action`
   is: a command too. So a program that holds only `sleep` holds a
   `poweroff` too.
-- An action of logind is a name of logind: `poweroff`, `halt`,
-  `reboot`, `soft-reboot`, `kexec`, `suspend`, `hibernate`,
-  `hybrid-sleep`, `suspend-then-hibernate`, `sleep`, `lock`, `ignore`.
-  The service calls it through logind (`*WithFlags`,
-  `SD_LOGIND_ROOT_CHECK_INHIBITORS`). It has no `Resume`; a `Resume` set for it is passed over, with a
-  warning in the journal.
-- A command runs in the unit of its stage, `drowsed-stage@.service`
-  (instance `battery-0`, `battery-1`, `ac-0`, …), which runs
-  `drowsed stage action <instance>`; its `Resume` is the stop of the
-  unit, `drowsed stage resume <instance>`. `drowsed stage` reads the
-  line from `/etc/drowse.conf`, splits it as a shell does (no shell
+- An action of logind is one of `poweroff`, `halt`, `suspend`,
+  `hibernate`, `hybrid-sleep`, `suspend-then-hibernate`, `sleep`. The
+  service calls it through logind (`*WithFlags`,
+  `SD_LOGIND_ROOT_CHECK_INHIBITORS`). It has no `leave` command.
+- A command runs in `drowsed-stage@.service` (instance `battery-0`,
+  `battery-1`, `ac-0`, …), which runs `drowsed stage enter <instance>`;
+  `leave` runs when the unit stops, as `drowsed stage leave <instance>`.
+  `drowsed stage` reads the command from `/etc/drowse.yaml`, splits it
+  as a shell does (no shell
   runs: no `|`, `&&`, `$VAR`) and runs it by `exec`; the path is looked
   up in `PATH` of the unit.
 - The service does not wait for the end of a command. Its exit code
   gives nothing; its output is in the journal of the unit.
-- A command has 5 s to run (`TimeoutStartSec=5s`), its `Resume` 5 s
+- A command has 5 s to run (`TimeoutStartSec=5s`), its `leave` 5 s
   (`TimeoutStopSec=5s`). Past it systemd kills it: a warning in the
-  journal; an `Action` killed so has no `Resume`. A long task does not
-  belong in a stage.
-- A stage with no `Action` but a `Resume` has a unit too: its start
-  runs nothing, its stop the `Resume`.
-- `Resume` runs always when the stage was entered: before the next stage
+  journal; a killed `enter` has no `leave`. A long task does not
+  belong in a section.
+- A section with no `enter` but a `leave` has a unit too: its start runs
+  nothing, its stop runs `leave`.
+- `leave` runs whenever an entered section is left: before the next one
   is entered, on activity, an inhibitor let go, a change of the power
   source, a stop of the service, a sleep. The service keeps a queue of
   jobs for each unit: a start, then a stop, one at a time, the next when
@@ -192,12 +179,12 @@ A stage is entered and left:
   started, the service writes the refusal to the journal, with the
   answer (for a sleep, the error `SleepVerbNotSupported` and its text:
   disabled by the settings, not in the kernel, no place to resume from).
-  It is a failed entry, not a stop and not a state: the next stage
+  It is a failed entry, not a stop and not a state: the next section
   comes as if the action had run.
 - At its stop (a sleep, `systemctl stop`, a restart) the service waits
-  for the commands that run, stops every unit of a stage that ran (so
-  their `Resume` runs), then exits: at most 10 s
-  (`TimeoutStopSec=10s`). At its start it stops every unit of a stage
+  for the commands that run, stops every unit of a section that ran (so
+  their `leave` runs), then exits: at most 10 s
+  (`TimeoutStopSec=10s`). At its start it stops every unit of a section
   that is left from before.
 
 ### Sleep
@@ -206,8 +193,8 @@ A stage is entered and left:
   wake; the service has no code of its own for a sleep and does not
   follow `PrepareForSleep`.
 - Before a sleep: `drowsed.service` has `Conflicts=sleep.target` and
-  `Before=sleep.target`. The units of the stages that ran stop with it
-  (`PartOf=`), so each `Resume` runs before the sleep.
+  `Before=sleep.target`. The units of the sections that ran stop with it
+(`PartOf=`), so each `leave` runs before the sleep.
 - After the wake: `drowsed-resume.service`, wanted by `suspend.target`,
   `hibernate.target`, `hybrid-sleep.target`,
   `suspend-then-hibernate.target` and ordered after them, starts the
@@ -215,8 +202,8 @@ A stage is entered and left:
 - A sleep that does not go through the targets of systemd (a write to
   `/sys/power/state`) is not seen.
 - A limit: nothing goes through a sleep. While the system sleeps the
-  service is not there; after the wake it starts from the first stage. So
-  a stage after a sleep (`suspend`, then `poweroff` some hours later) does
+  service is not there; after the wake it starts from the first section. So
+  a section after a sleep (`suspend`, then `poweroff` some hours later) does
   not come: only systemd can wake the system for it. For a sleep, then
   hibernation, systemd has `suspend-then-hibernate`; a sleep, then a
   power off, the project does not do.
@@ -230,7 +217,7 @@ the user, a panel) reads it there and does not work it out again.
 | Property | Value |
 |---|---|
 | `State` | `s`: `active` (not idle: a session in use or an inhibitor), `idle` (the time runs), `announced` (the warning runs) |
-| `ScheduledAction` | `(st)`: the action of the next stage (its `ActionHint`, or `Action` as it is), and when it comes; `("", 0)` when none comes and in `active` |
+| `ScheduledAction` | `(st)`: the action of the next section (`hint`, or its `enter` or `action` as written), and when it comes; `("", 0)` when none comes and in `active` |
 | `HeldBySessions` | `a(sussss)`: the sessions that hold the system up; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `HeldByInhibitors` | `a(ssssuu)`: the inhibitors that hold the system up, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `PowerSource` | `s`: `battery`, `ac`, or `unknown` when UPower does not answer (the power is then taken as AC) |
@@ -281,7 +268,7 @@ mechanisms of the system, which check the rights themselves:
   unit (`systemctl`).
 
 A reader learns of the announce by `State`: it becomes `announced`. It
-does not work out the time of the announce. With `Countdown=Never`,
+does not work out the time of the announce. With `countdown: never`,
 `State` is never `announced`.
 
 The service writes no `wall`: while an ssh session is open the system is
@@ -312,7 +299,7 @@ It writes:
 - **A source that is not there**: logind not on the bus; UPower not
   there, so the power is taken as AC; an action that logind refuses,
   with its answer.
-- **A command of a stage**: started; its `Resume`; a stop that waits for
+- **A command of a section**: started; its `leave`; a stop that waits for
   a command that still runs; a command killed past its 5 s.
 
 A source that comes back is written once, too.
@@ -329,9 +316,9 @@ inhibitors let go: a new count
 power: AC; the times moved
 idle, on AC: no action
 upower: no answer; the power is taken as AC
-stage 1 (radio off): started
-drowsed-stage@battery-1.service: the command still runs after 4 s; its Resume waits
-drowsed-stage@battery-1.service: the command ended; its Resume runs late
+section 1 (radio off): started
+drowsed-stage@battery-1.service: the command still runs after 4 s; its leave waits
+drowsed-stage@battery-1.service: the command ended; its leave runs late
 suspend refused by logind: org.freedesktop.login1.SleepVerbNotSupported: Sleep verb 'suspend' is not configured or configuration is not supported by kernel
 ```
 
@@ -345,80 +332,73 @@ not there, a refusal, a command that waits or is killed is `warning`.
 
 System settings only. A user has no settings of their own in the service.
 
-The settings are in sections, a section a stage (see "The action"). The
-first stage on battery is `[IdleBattery]`, the same as `[IdleBattery-0]`;
-the next ones are `[IdleBattery-1]`, `[IdleBattery-2]`, …; the same for
-`[IdleAC]`. The power source now picks the stages. The numbers go one by
-one from 1; a gap ends the stages there, with a warning in the journal.
-When both `[IdleBattery]` and `[IdleBattery-0]` are there, the service
-writes a warning and goes on: they are one section, the keys of both
-apply, the later one wins.
+The file is `/etc/drowse.yaml`. It has `sessions.classes`, an optional
+`sections` library, and `main` and optional `lid` chains. Each chain has
+`battery` and `ac` lists. A chain not set is empty. With no file or an
+empty file, all chains are empty and the service does nothing.
 
-Each key may be in each section; a key that is not there takes its
-default, the same in every stage. `Action` has no default: a stage with
-none is entered with nothing done. The default `IdleTime` is `Never`:
-with no settings file the service does nothing.
-
-| Key | Meaning | Default in `[IdleBattery]` | Default in `[IdleAC]` |
-|---|---|---|---|
-| `IdleTime` | idle time before the announce: a time or `Never` (no announce, no entry). For a further stage, counted from the entry into the stage before it | `Never` | `Never` |
-| `Countdown` | how long the announce runs before the action: a time or `Never` (no announce: the action comes at `IdleTime`). It is added to `IdleTime`: with `IdleTime=15m` and `Countdown=2m` the announce starts at 15 min of idle, the action comes at 17 min | `2m` | `2m` |
-| `Action` | an action of logind, or a command; with none, the stage is entered with nothing done | none | none |
-| `ActionHint` | the name of the action that the bus and the panel show; with none, they show `Action` as it is | none | none |
-| `Resume` | a command that undoes `Action` when the system is active again; for a command only | none | none |
-
-Example:
-
-```ini
-[IdleBattery]
-IdleTime=0
-Countdown=Never
-Action=tuned-adm profile powersave
-ActionHint=power save
-Resume=tuned-adm auto_profile
-
-[IdleBattery-1]
-IdleTime=5m
-Countdown=Never
-Action=nmcli radio all off
-ActionHint=radio off
-Resume=nmcli radio all on
-
-[IdleBattery-2]
-IdleTime=30m
-Countdown=2m
-Action=poweroff
-
-[IdleAC]
-IdleTime=Never
-```
-
-On battery: at once the profile of tuned is power save; at 5 min tuned
-picks its profile again (the power save is left), then the radio is off;
-30 min later the announce, and 2 min after it the radio is on again and
-the system powers off. When the user comes back while a stage is
-entered, only that stage is left: the profile of tuned comes back, or
-the radio is on. On AC: nothing.
-
-`tuned-adm` has no command to go back to the profile before;
-`auto_profile` goes back to the profile it recommends. A user who picks
-the profile by hand names it: `Resume=tuned-adm profile balanced`.
-
-### The sessions that count
-
-The section `[Sessions]`, one key:
+The keys of a section are:
 
 | Key | Meaning | Default |
 |---|---|---|
-| `Classes` | the classes of logind of the sessions that count in the idle state, split by spaces; a session of another class is left out; empty leaves out all | `user user-early user-light user-early-light greeter` |
+| `after` | idle time before announce; for the next section it starts at the entry before | `never` |
+| `countdown` | time from the announce to entry; `never` means no announce | `never` for a command or empty section; `2m` for a logind action |
+| `enter` | command to run on entry | none |
+| `leave` | command to run when leaving a command section | none |
+| `action` | action of logind; allowed only in the last section of a chain | none |
+| `hint` | name shown on the bus and in the panel | `enter` or `action` as written |
+
+`enter` and `leave` are commands. `enter: poweroff` runs the command
+`poweroff`; use `action: poweroff` for the action of logind. An action
+section cannot have `enter` or `leave`. A section with neither `enter`
+nor `action` is entered with nothing done.
+
+The package file sets power save after 10 min on battery, then announces
+`poweroff` 38 min later and does it 2 min after that. On AC nothing
+comes. Its `sections` library has an unused `mute-powersave` section.
+
+```yaml
+sessions:
+  classes: [user, user-early, user-light, user-early-light, greeter]
+
+sections:
+  - &mute-powersave
+    after: 10m
+    enter: tuned-adm profile cm5-powersave-no-radio
+    leave: systemctl try-restart tuned-ppd.service
+    hint: radio off
+
+main:
+  battery:
+    - after: 10m
+      enter: tuned-adm profile cm5-powersave
+      leave: systemctl try-restart tuned-ppd.service
+      hint: power save
+    - after: 38m
+      countdown: 2m
+      action: poweroff
+  ac: []
+```
+
+`sections` is checked but not used by a chain. A chain uses an alias to
+repeat a section, or `<<:` to change some of its keys. Times are seconds
+or text such as `2m`, `1h 30min`, or `never`.
+
+### The sessions that count
+
+The mapping `sessions`, one key:
+
+| Key | Meaning | Default |
+|---|---|---|
+| `classes` | the logind classes that count; a class not listed is left out; an empty list leaves all out | `[user, user-early, user-light, user-early-light, greeter]` |
 
 - A name is compared with the class of a session as it is. Any name is
   taken, unchecked, so a class of a newer logind can be named.
 - The default is the classes logind counts itself
   (`SESSION_CLASS_CAN_IDLE`, notes/logind-idle.md).
 - A login screen (`greeter`) that sets no idle hint is never idle and
-  keeps the system up while it is shown. `Classes=user user-early
-  user-light user-early-light` leaves it out: with nobody logged in, the
+  keeps the system up while it is shown. `classes: [user, user-early,
+  user-light, user-early-light]` leaves it out: with nobody logged in, the
   system is then idle.
 - The settings file says how to list the classes logind knows
   (`varlinkctl introspect`) and the class of each session
@@ -432,14 +412,11 @@ The section `[Sessions]`, one key:
   and UPower at the start.
 - At the start the count starts anew: the idle state starts no sooner
   than the start. An announce that ran before the restart is gone.
-- The settings are in one file, `/etc/drowse.conf`, in the form of the
-  files of systemd: `[Sessions]` and the sections of the stages
-  (`[IdleBattery]`, `[IdleBattery-1]`, …, `[IdleAC]`, …), then
-  `Key=value`. There are no drop-ins. With no file, the defaults apply:
-  nothing is done.
-- The package installs the file with its stages: on battery
+- The settings are in `/etc/drowse.yaml`. There are no drop-ins. With
+  no file, the chains are empty.
+- The package installs the file with its sections: on battery
   `tuned-adm profile cm5-powersave` at 10 min of idle (no
-  announce, `Resume=systemctl try-restart tuned-ppd.service`), then
+  announce, `leave: systemctl try-restart tuned-ppd.service`), then
   `poweroff` 38 min later with an announce of 2 min, at 50 min of idle;
   on AC nothing. Every other key is there with its default in a comment.
   With no tuned the first command fails, and the `poweroff` still comes.
@@ -459,7 +436,7 @@ The section `[Sessions]`, one key:
   `ppd.conf` of tuned-ppd: tuned-ppd then keeps its base profile, the
   one the user chose, and sets it again at its restart
   (`initialize()` of `tuned/ppd/controller.py`).
-- A unit `drowsed-config.path` watches `/etc/drowse.conf`; on a change
+- A unit `drowsed-config.path` watches `/etc/drowse.yaml`; on a change
   it runs `systemctl try-restart drowsed.service`.
 - `drowsed.service`, `drowsed-config.path` and `drowsed-resume.service`
   are on by default: a preset file of the package enables them
@@ -468,10 +445,10 @@ The section `[Sessions]`, one key:
 
 ### Times
 
-`IdleTime=0`: the announce comes as soon as the system is idle.
-`IdleTime=Never`: no announce, no action. `Countdown=0`: the announce is
-published and the action comes at once. `Countdown=Never`: no announce;
-the action comes at `IdleTime`.
+`after: 0`: entry is due as soon as the system is idle. If `countdown` is
+set, the announce starts then. `after: never`: no entry.
+`countdown: 0`: the announce is published and entry comes at once.
+`countdown: never`: no announce; entry comes at `after`.
 
 A time in the settings is one or more parts, each a number and a unit.
 The parts are added. Spaces between the parts and between a number and

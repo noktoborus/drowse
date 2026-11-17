@@ -17,7 +17,7 @@ use crate::settings::{self, Settings};
 use crate::world::{Event, Login, Power, Refusal, Units};
 use crate::{bus, journal};
 
-/// How long the stop of the service waits for the `Resume` of the stages.
+/// How long the stop of the service waits for `leave` commands.
 const STOP_WAIT: Duration = Duration::from_secs(10);
 
 /// The time of `CLOCK_MONOTONIC`.
@@ -77,10 +77,7 @@ impl Publish for BusPublisher {
 
 /// Runs the service on the real world until `SIGTERM`.
 pub async fn serve() -> Result<()> {
-    let (settings, warnings) = settings::load(Path::new(settings::PATH))?;
-    for warning in warnings {
-        journal::write(Level::Warning, &format!("{}: {warning}", settings::PATH));
-    }
+    let settings = settings::load(Path::new(settings::PATH))?;
     let (system, mut events) = crate::world::system::connect().await?;
     let publisher = BusPublisher::new(system.connection().clone());
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
@@ -206,7 +203,7 @@ where
         Ok(())
     }
 
-    /// Stops the units of the stages and waits for their `Resume`.
+    /// Stops the units of the sections and waits for their `leave`.
     async fn stop(&mut self, events: &mut UnboundedReceiver<Event>) {
         let out = self.engine.stop(self.clock.now());
         self.execute(out).await;
@@ -215,7 +212,7 @@ where
         while !self.engine.settled() {
             tokio::select! {
                 () = &mut deadline => {
-                    journal::write(Level::Warning, "stop: the Resume of the stages did not end in time");
+                    journal::write(Level::Warning, "stop: a leave command did not end in time");
                     return;
                 }
                 event = events.recv() => match event {

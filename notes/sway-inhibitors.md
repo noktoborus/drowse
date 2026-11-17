@@ -64,8 +64,8 @@ The inhibitor of waybar (and of a video) does not hold when:
 Then the session goes idle after the time of `idlehint`, logind sees it,
 and the action comes after its time. Example: the user has set the
 inhibitor of waybar by hand and gives no input; then turns the screen off
-by the power key: the system goes down after `IdleTime` and `Countdown`
-of `[IdleBattery]`, though the user set the inhibitor. What the system does meanwhile does not count:
+by the power key: the system goes down after `after` and `countdown` of
+`main.battery`, though the user set the inhibitor. What the system does meanwhile does not count:
 only the inhibitor set by hand stood for "keep the system up".
 
 To keep the system up with the screen off or locked, an inhibitor of

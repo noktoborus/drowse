@@ -9,7 +9,7 @@ use std::time::Duration;
 
 pub use units::{Job, unit_name};
 
-use crate::settings::{Action, LogindAction, Power, Settings, Span, Stage};
+use crate::settings::{LogindAction, Power, Section, SectionKind, Settings, Span};
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
@@ -110,7 +110,7 @@ enum Phase {
     /// The announce of a stage runs; its action comes at `at`.
     Announced { stage: usize, at: u64 },
     /// The time of the entry into a stage came at `at`; a job of a unit
-    /// still runs (the `Resume` of the stage before), and the entry waits
+    /// still runs (the `leave` of the section before), and entry waits
     /// for its end.
     Waiting { stage: usize, at: u64 },
     /// The jobs ended; the entry into `stage` comes on a fresh read of
@@ -220,13 +220,13 @@ impl Engine {
         match ended {
             Ended::Quiet => {}
             Ended::StartFailed => out.push(warning(format!(
-                "{unit}: the command failed or was killed; no Resume"
+                "{unit}: the command failed or was killed; no leave"
             ))),
             Ended::ResumeLate => out.push(warning(format!(
-                "{unit}: the command ended; its Resume runs late"
+                "{unit}: the command ended; its leave runs late"
             ))),
             Ended::StopFailed => out.push(warning(format!(
-                "{unit}: the Resume failed or was killed; the next stage comes"
+                "{unit}: the leave failed or was killed; the next section comes"
             ))),
         }
         out
@@ -249,8 +249,8 @@ impl Engine {
     pub fn next_due(&self) -> Option<(u64, Due)> {
         match self.phase {
             Phase::Counting { stage, base } => {
-                let stage = self.stages().get(stage)?;
-                let Span::Time(idle) = stage.idle_time else {
+                let stage = self.sections().get(stage)?;
+                let Span::Time(idle) = stage.after else {
                     return None;
                 };
                 let due = match stage.countdown {
@@ -291,10 +291,10 @@ impl Engine {
         let none = (String::new(), 0);
         match self.phase {
             Phase::Counting { stage, base } => {
-                let Some(stage) = self.stages().get(stage) else {
+                let Some(stage) = self.sections().get(stage) else {
                     return none;
                 };
-                let Span::Time(idle) = stage.idle_time else {
+                let Span::Time(idle) = stage.after else {
                     return none;
                 };
                 let countdown = match stage.countdown {
@@ -307,7 +307,7 @@ impl Engine {
             Phase::Announced { stage, at }
             | Phase::Waiting { stage, at }
             | Phase::Ready { stage, at } => self
-                .stages()
+                .sections()
                 .get(stage)
                 .map_or(none, |stage| (stage.shown_name().to_owned(), at)),
             Phase::Active | Phase::Done => none,
@@ -359,9 +359,9 @@ impl Engine {
         }
     }
 
-    /// Starts the announce of a stage: its action comes `Countdown` from now.
+    /// Starts the announce of a section: entry comes `countdown` from now.
     fn announce(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
-        let Some(this) = self.stages().get(stage) else {
+        let Some(this) = self.sections().get(stage) else {
             return;
         };
         let countdown = match this.countdown {
@@ -379,45 +379,50 @@ impl Engine {
         };
     }
 
-    /// The time of the entry into a stage came. One stage is entered at a
-    /// time and one job runs at a time: the stage entered before is left
-    /// first (its `Resume`), and the entry waits until no job runs.
+    /// The time of entry into a section came. One section is entered at a
+    /// time and one job runs at a time: the section before is left
+    /// first (its `leave`), and the entry waits until no job runs.
     fn act(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
         if self.units.all_down() {
             self.enter(stage, now, out);
             return;
         }
         out.push(info(format!(
-            "stage {stage}: waits for the Resume of the stage before"
+            "section {stage}: waits for the leave of the section before"
         )));
         self.stop_units(now, out);
         self.phase = Phase::Waiting { stage, at: now };
     }
 
     /// Enters a stage: its action, if any; then counts the next stage from
-    /// now. A stage with a command or a `Resume` has a unit: its start runs
-    /// the command, its stop the `Resume`.
+    /// now. A command section has a unit: its start runs `enter`, its stop
+    /// runs `leave`.
     fn enter(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
-        let Some(this) = self.stages().get(stage).cloned() else {
+        let Some(this) = self.sections().get(stage).cloned() else {
             return;
         };
-        match (&this.action, &this.resume) {
-            (Some(Action::Logind(action)), _) => {
+        match &this.kind {
+            SectionKind::Action(action) => {
                 out.push(info(format!("action: {action}")));
                 out.push(Command::Logind(*action));
             }
-            (None, None) => out.push(info(format!("stage {stage}: entered, no action"))),
-            (Some(Action::Command(_)), _) | (None, Some(_)) => {
+            SectionKind::Command {
+                enter: None,
+                leave: None,
+            } => {
+                out.push(info(format!("section {stage}: entered, no action")));
+            }
+            SectionKind::Command { .. } => {
                 let unit = unit_name(section(self.power), stage);
                 out.push(info(format!(
-                    "stage {stage} ({}): started",
+                    "section {stage} ({}): started",
                     this.shown_name()
                 )));
                 out.extend(self.units.want_up(&unit, now).into_iter().map(Command::Job));
             }
         }
         let next = stage + 1;
-        self.phase = if next < self.stages().len() {
+        self.phase = if next < self.sections().len() {
             Phase::Counting {
                 stage: next,
                 base: now,
@@ -432,20 +437,20 @@ impl Engine {
         let (jobs, waiting) = self.units.want_all_down(now);
         for (unit, ran) in waiting {
             out.push(warning(format!(
-                "{unit}: the command still runs after {}; its Resume waits",
+                "{unit}: the command still runs after {}; its leave waits",
                 human(Duration::from_micros(ran))
             )));
         }
         out.extend(jobs.into_iter().map(Command::Job));
     }
 
-    /// The stages of the power source now.
-    fn stages(&self) -> &[Stage] {
-        self.settings.stages(section(self.power))
+    /// The sections of the power source now.
+    fn sections(&self) -> &[Section] {
+        self.settings.sections(section(self.power))
     }
 
     /// The sessions that count in the idle state: not `closing`, of a
-    /// class of `Classes=` of `[Sessions]`.
+    /// class in `sessions.classes` of the settings.
     fn counted<'a>(&'a self, snapshot: &'a Snapshot) -> impl Iterator<Item = &'a Session> {
         snapshot.sessions.iter().filter(|session| {
             session.state != SessionState::Closing && self.settings.counts_class(&session.class)

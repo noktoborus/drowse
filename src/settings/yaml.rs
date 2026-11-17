@@ -76,6 +76,20 @@ pub struct Section {
     pub kind: SectionKind,
 }
 
+impl Section {
+    /// The name to show: `hint`, or the action or command as written.
+    pub fn shown_name(&self) -> &str {
+        self.hint.as_deref().unwrap_or_else(|| match &self.kind {
+            SectionKind::Action(action) => action.name(),
+            SectionKind::Command {
+                enter: Some(command),
+                ..
+            } => command.line(),
+            SectionKind::Command { enter: None, .. } => "",
+        })
+    }
+}
+
 /// The kind of section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SectionKind {
