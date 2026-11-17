@@ -438,19 +438,24 @@ The section `[Sessions]`, one key:
   `Key=value`. There are no drop-ins. With no file, the defaults apply:
   nothing is done.
 - The package installs the file with its stages: on battery
-  `tuned-adm profile drowse-cm5-powersave` at 10 min of idle (no
+  `tuned-adm profile cm5-powersave` at 10 min of idle (no
   announce, `Resume=systemctl try-restart tuned-ppd.service`), then
   `poweroff` 38 min later with an announce of 2 min, at 50 min of idle;
   on AC nothing. Every other key is there with its default in a comment.
   With no tuned the first command fails, and the `poweroff` still comes.
-- The package gives the profile of TuneD `drowse-cm5-powersave` as an
-  example (`examples/tuned/`, installed with the documentation, not as
-  a profile): `powersave`, the CPU at 800 MHz at most, and USB
-  autosuspend on every device but those of `KEEP` of
-  `usb-autosuspend.sh` (the keyboard `434b:5543` and its bootloader
-  `1eaf:*`) and the
-  hubs they hang on, which never suspend.
-  The user copies it to `/etc/tuned/profiles/`. It is not in
+- The package gives the profile of TuneD `cm5-powersave` as an
+  example (`examples/tuned/`, installed with the documentation): for
+  the BCM2712, `powersave`, the CPU at 800 MHz at most, USB autosuspend
+  on every device but those of `KEEP` of `usb-autosuspend.sh` (the
+  keyboard `434b:5543` and its bootloader `1eaf:*`) and the hubs they
+  hang on, which never suspend, the dirty pages written once a minute,
+  runtime PM of every PCI device, and printing and the timers of
+  maintenance stopped. It gives also `cm5-powersave-no-radio`, a deeper
+  step: `cm5-powersave`, and every radio off by its soft block of
+  rfkill, the values before written back at its end; the file of the
+  package does not use it. The user copies them to
+  `/etc/tuned/profiles/`, unless `tuned-adm list` shows them already.
+  Neither is in
   `ppd.conf` of tuned-ppd: tuned-ppd then keeps its base profile, the
   one the user chose, and sets it again at its restart
   (`initialize()` of `tuned/ppd/controller.py`).

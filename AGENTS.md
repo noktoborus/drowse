@@ -151,7 +151,10 @@ RULE layout.system : the files of the system are in a directory by
      module of waybar; each file named as it is installed
 RULE layout.examples = examples/, files the user copies by hand; the
      package installs them with the documentation, never in the system
-EX+  examples/tuned/drowse-cm5-powersave/tuned.conf
+     by default
+EXC  a packager may install the profile of TuneD as a profile, by a
+     choice of the user that is off by default; the user asked for it
+EX+  examples/tuned/cm5-powersave/tuned.conf
 RULE settings.file : etc/drowse.conf is the stages the package gives, and
      every other key with its default, in comments; a test checks it reads
      with no warning and gives those stages
