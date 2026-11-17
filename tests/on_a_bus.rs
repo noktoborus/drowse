@@ -407,5 +407,5 @@ async fn drowse_inhibit_on_a_bus() {
     assert_eq!(both.status.code(), Some(0), "{both:?}");
     let taken = inhibitors.lock().unwrap();
     assert!(taken.iter().any(|item| item.row.0 == "idle"));
-    assert!(taken.iter().any(|item| item.row.0 == "sleep:shutdown"));
+    assert!(taken.iter().any(|item| item.row.0 == "shutdown:sleep"));
 }
