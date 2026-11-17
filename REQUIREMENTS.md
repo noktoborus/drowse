@@ -7,9 +7,8 @@ source.
 
 ## Terms
 
-- **Idle**: every session of logind is idle, and no inhibitor of logind
-  of `idle`, `sleep` or `shutdown` (`block` or `block-weak`) is held,
-  whatever the action is. Such an inhibitor counts as activity. Sessions
+- **Idle**: every counted session of logind is idle. Inhibitors do not
+  count as activity. Sessions
   of all kinds count alike: a graphical one, a console, ssh. A session
   in the state `closing` is left out: after a logout nobody updates its
   idle state (notes/session-end.md). A session of a class not in
@@ -21,9 +20,6 @@ source.
   each counted as activity:
   - a session that was not idle leaves the count (`closing`, removed),
     when the service sees it;
-  - the last inhibitor of `idle`, `sleep` or `shutdown` is let go, of
-    any kind alike; the service does not count on the session to see
-    an inhibitor of `idle`;
   - the power source changes;
   - the service starts (see "Sleep").
 - **The move to `closing`** sends no signal on D-Bus. The service learns
@@ -55,7 +51,6 @@ source.
 | Inhibitor of screen and system | no |
 | Inhibitor of system | no |
 | The charger is put in or taken out while idle | a new count from that moment |
-| The inhibitor of system is taken off, every session idle | a new count from that moment |
 | The charge is low or critical | by UPower |
 
 An ssh session is never idle for logind, with a terminal or not
@@ -115,15 +110,18 @@ at a time while the system stays idle. A section has `after`,
 
 ### An inhibitor of system
 
-- An inhibitor of `idle`, `sleep` or `shutdown` makes the state
-  `active`: no count, no announce, no action. One taken during the
-  announce cancels it. The journal gets one line: the inhibitor, who,
-  why.
-- When the last one is let go, that moment is activity: the count starts
-  anew from it, at the first section.
-- When logind refuses the action as inhibited (`BlockedByInhibitorLock`:
-  an inhibitor taken just before the call), the state is `active`, as
-  for any inhibitor.
+- An inhibitor holds entry by section kind: `idle` holds command
+  sections; `sleep` holds sleep actions; `shutdown` holds poweroff and
+  halt. `block` and `block-weak` hold alike; `delay` does not.
+- A hold is not activity. It does not reset the count or leave an
+  entered section. A due entry waits and enters when the hold ends. If
+  the hold ends before the entry time, entry stays on time.
+- An inhibitor taken during an announce does not cancel it. Activity
+  still cancels the announce and starts at the first section.
+- If logind refuses an action as inhibited, the entry waits for the
+  matching inhibitor to end.
+- The journal gets one `held` line per wait and one `released` line when
+  a logged hold ends.
 
 ### The power source changes
 
@@ -144,10 +142,9 @@ at a time while the system stays idle. A section has `after`,
 - Just before the action, the service reads the sessions and the
   inhibitors from logind again (`ListSessionsEx()`, `BlockInhibited`,
   `BlockWeakInhibited`), not from what it keeps from the signals.
-- The action is inhibited when `idle`, `sleep` or `shutdown` is in
-  `BlockInhibited` or `BlockWeakInhibited` of logind, whatever `action`
-  is: a command too. So a program that holds only `sleep` holds a
-  `poweroff` too.
+- A command entry is held by `idle`; logind actions are held by the kind
+  logind checks: `sleep` for sleep actions and `shutdown` for poweroff
+  and halt. A program that holds only `sleep` does not hold poweroff.
 - An action of logind is one of `poweroff`, `halt`, `suspend`,
   `hibernate`, `hybrid-sleep`, `suspend-then-hibernate`, `sleep`. The
   service calls it through logind (`*WithFlags`,
@@ -216,7 +213,7 @@ the user, a panel) reads it there and does not work it out again.
 
 | Property | Value |
 |---|---|
-| `State` | `s`: `active` (not idle: a session in use or an inhibitor), `idle` (the time runs), `announced` (the warning runs) |
+| `State` | `s`: `active` (a counted session is in use), `idle` (the time runs), `announced` (the warning runs) |
 | `ScheduledAction` | `(st)`: the action of the next section (`hint`, or its `enter` or `action` as written), and when it comes; `("", 0)` when none comes and in `active` |
 | `HeldBySessions` | `a(sussss)`: the sessions that hold the system up; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `HeldByInhibitors` | `a(ssssuu)`: the inhibitors that hold the system up, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |

@@ -193,7 +193,7 @@ where
     /// The time of the engine came; before an action, logind is read again.
     async fn on_due(&mut self, due: Due) -> Result<()> {
         let out = match due {
-            Due::Announce => self.engine.on_due(self.clock.now()),
+            Due::Announce => self.engine.on_announce_due(self.clock.now()),
             Due::Action => {
                 let snapshot = read(self.world).await?;
                 self.engine.on_snapshot(self.clock.now(), snapshot)
@@ -234,15 +234,30 @@ where
             match command {
                 Command::Journal(level, text) => journal::write(level, &text),
                 Command::Logind(action) => match self.world.act(action).await {
-                    Ok(()) => {}
-                    Err(Refusal::Inhibited) => journal::write(
-                        Level::Notice,
-                        &format!("{action}: held by an inhibitor taken just now"),
-                    ),
-                    Err(Refusal::Other(text)) => journal::write(
-                        Level::Warning,
-                        &format!("{action} refused by logind: {text}"),
-                    ),
+                    Ok(()) => self.engine.on_action_finished(),
+                    Err(Refusal::Inhibited) => match self.world.inhibitors().await {
+                        Ok(inhibitors) => {
+                            queue.extend(
+                                self.engine.on_action_blocked(self.clock.now(), inhibitors),
+                            );
+                        }
+                        Err(error) => {
+                            self.engine.on_action_finished();
+                            journal::write(
+                                Level::Warning,
+                                &format!(
+                                    "{action} was held by an inhibitor; cannot read inhibitors: {error}"
+                                ),
+                            );
+                        }
+                    },
+                    Err(Refusal::Other(text)) => {
+                        self.engine.on_action_finished();
+                        journal::write(
+                            Level::Warning,
+                            &format!("{action} refused by logind: {text}"),
+                        );
+                    }
                 },
                 Command::Job(Job::Start(unit)) => {
                     if let Err(text) = self.world.start(&unit).await {
