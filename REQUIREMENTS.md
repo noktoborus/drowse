@@ -213,20 +213,20 @@ the user, a panel) reads it there and does not work it out again.
 
 | Property | Value |
 |---|---|
-| `State` | `s`: `active` (a counted session is in use), `idle` (the time runs), `announced` (the warning runs) |
-| `ScheduledAction` | `(st)`: the action of the next section (`hint`, or its `enter` or `action` as written), and when it comes; `("", 0)` when none comes and in `active` |
+| `State` | `s`: `active` (a counted session is in use), `idle` (the time runs), `announced` (the warning runs or waits for a held entry), `held` (a held entry with no announce) |
+| `ScheduledAction` | `(st)`: the hint of the next section and when it comes; time is 0 when a due entry waits, or `("", 0)` when none comes |
 | `HeldBySessions` | `a(sussss)`: the sessions that hold the system up; on the object `/io/github/noktoborus/Drowse/HeldBy` |
-| `HeldByInhibitors` | `a(ssssuu)`: the inhibitors that hold the system up, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |
+| `HeldByInhibitors` | `a(ssssuu)`: the inhibitors holding the due entry, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `PowerSource` | `s`: `battery`, `ac`, or `unknown` when UPower does not answer (the power is then taken as AC) |
 
 - A time is in microseconds of `CLOCK_MONOTONIC`.
 - A session in `HeldBySessions` has the fields of logind as they are:
   id, uid, user, type, tty, remote host. The service gives no kind of
   its own.
-- What they hold by the state: in `active`, the sessions that are not
-  idle and the inhibitors that hold (see "Idle"); in `idle` and
-  `announced`, nothing. Only the modes `block` and `block-weak`, never
-  `delay`.
+- In `active`, `HeldBySessions` has the sessions that are not idle. In
+  `held`, or `announced` while entry waits, `HeldByInhibitors` has the
+  inhibitors that hold it. Both are empty otherwise. Only the modes
+  `block` and `block-weak`, never `delay`.
 - A console that becomes idle sends no signal (notes/logind-interface.md).
   So a console can stay in `HeldBySessions` after it is idle, up to the
   next signal or time of the service.
@@ -266,7 +266,7 @@ mechanisms of the system, which check the rights themselves:
 
 A reader learns of the announce by `State`: it becomes `announced`. It
 does not work out the time of the announce. With `countdown: never`,
-`State` is never `announced`.
+`State` becomes `held` when an entry waits for an inhibitor.
 
 The service writes no `wall`: while an ssh session is open the system is
 never idle, so no announce comes; a console sees it only when its text

@@ -209,6 +209,9 @@ fn an_idle_inhibitor_holds_a_command_and_release_enters_it() {
     let out = engine.on_due(mins(1));
     assert!(has_line(&out, Level::Info, "held: foo by drowse-inhibit"));
     assert!(jobs(&out).is_empty());
+    assert_eq!(engine.view().state, State::Held);
+    assert_eq!(engine.view().scheduled.1, 0);
+    assert_eq!(engine.view().inhibitors.len(), 1);
     assert_eq!(engine.next_due(), None);
     let out = engine.on_snapshot(mins(2), idle_world(0));
     assert!(has_line(&out, Level::Info, "released: foo now"));

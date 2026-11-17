@@ -13,9 +13,6 @@ use crate::settings::{LogindAction, Power, Section, SectionKind, Settings, Span}
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
-/// The kinds of an inhibitor that hold the system up, whatever the action.
-const KINDS_THAT_HOLD: [&str; 3] = ["idle", "sleep", "shutdown"];
-
 /// The line of the journal when UPower does not answer.
 const UPOWER_GONE: &str = "upower: no answer; the power is taken as AC";
 
@@ -40,6 +37,8 @@ pub enum State {
     Idle,
     /// An announce runs.
     Announced,
+    /// A due section waits for an inhibitor.
+    Held,
 }
 
 impl State {
@@ -49,6 +48,7 @@ impl State {
             Self::Active => "active",
             Self::Idle => "idle",
             Self::Announced => "announced",
+            Self::Held => "held",
         }
     }
 }
@@ -251,7 +251,7 @@ impl Engine {
         }
         self.phase = Phase::Held {
             stage,
-            at: now,
+            at: 0,
             announced,
             logged: false,
         };
@@ -325,11 +325,7 @@ impl Engine {
     /// What the service publishes now.
     pub fn view(&self) -> View {
         let (state, sessions, inhibitors) = match self.phase {
-            Phase::Active => (
-                State::Active,
-                self.sessions_in_use(),
-                holding(&self.snapshot.inhibitors),
-            ),
+            Phase::Active => (State::Active, self.sessions_in_use(), Vec::new()),
             Phase::Announced { .. }
             | Phase::Waiting {
                 announced: true, ..
@@ -339,15 +335,23 @@ impl Engine {
             }
             | Phase::Held {
                 announced: true, ..
-            } => (State::Announced, Vec::new(), Vec::new()),
+            } => (State::Announced, Vec::new(), self.held_inhibitors()),
+            Phase::Held {
+                stage,
+                announced: false,
+                ..
+            } => (
+                State::Held,
+                Vec::new(),
+                self.sections().get(stage).map_or_else(Vec::new, |section| {
+                    held_by(section, &self.snapshot.inhibitors)
+                }),
+            ),
             Phase::Counting { .. }
             | Phase::Waiting {
                 announced: false, ..
             }
             | Phase::Ready {
-                announced: false, ..
-            }
-            | Phase::Held {
                 announced: false, ..
             }
             | Phase::Done => (State::Idle, Vec::new(), Vec::new()),
@@ -359,6 +363,15 @@ impl Engine {
             inhibitors,
             power: self.power,
         }
+    }
+
+    fn held_inhibitors(&self) -> Vec<Inhibitor> {
+        let Phase::Held { stage, .. } = self.phase else {
+            return Vec::new();
+        };
+        self.sections().get(stage).map_or_else(Vec::new, |section| {
+            held_by(section, &self.snapshot.inhibitors)
+        })
     }
 
     /// The action of the next stage and its time.
@@ -497,7 +510,7 @@ impl Engine {
     /// first (its `leave`), and the entry waits until no job runs.
     fn act(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
         let announced = self.was_announced();
-        if self.wait_for_hold(stage, now, announced, out) {
+        if self.wait_for_hold(stage, announced, out) {
             return;
         }
         if self.units.all_down() {
@@ -520,7 +533,7 @@ impl Engine {
     /// runs `leave`.
     fn enter(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
         let announced = self.was_announced();
-        if self.wait_for_hold(stage, now, announced, out) {
+        if self.wait_for_hold(stage, announced, out) {
             return;
         }
         let Some(this) = self.sections().get(stage).cloned() else {
@@ -594,13 +607,7 @@ impl Engine {
         )
     }
 
-    fn wait_for_hold(
-        &mut self,
-        stage: usize,
-        now: u64,
-        announced: bool,
-        out: &mut Vec<Command>,
-    ) -> bool {
+    fn wait_for_hold(&mut self, stage: usize, announced: bool, out: &mut Vec<Command>) -> bool {
         let Some(section) = self.sections().get(stage) else {
             return false;
         };
@@ -611,7 +618,7 @@ impl Engine {
         out.push(held_line(section, &inhibitors[0]));
         self.phase = Phase::Held {
             stage,
-            at: now,
+            at: 0,
             announced,
             logged: true,
         };
@@ -675,21 +682,6 @@ impl Engine {
             human(Duration::from_micros(at.saturating_sub(now)))
         )
     }
-}
-
-/// The inhibitors that hold the system up.
-pub(crate) fn holding(inhibitors: &[Inhibitor]) -> Vec<Inhibitor> {
-    inhibitors
-        .iter()
-        .filter(|inhibitor| MODES_THAT_HOLD.contains(&inhibitor.mode.as_str()))
-        .filter(|inhibitor| {
-            inhibitor
-                .what
-                .split(':')
-                .any(|kind| KINDS_THAT_HOLD.contains(&kind))
-        })
-        .cloned()
-        .collect()
 }
 
 /// The inhibitors that hold entry into this section.

@@ -254,6 +254,7 @@ The module, as the file has it:
     "format-icons": {
         "unknown": "?",
         "announced": "⏰",
+        "held": "🔒",
         "own": "☕",
         "other": "🔒",
         "session-other": "👤",
@@ -271,6 +272,7 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
     "format-icons": {
         "unknown": "󰋖",
         "announced": "󰀠",
+        "held": "󰌾",
         "own": "󰅶",
         "other": "󰌾",
         "session-other": "󰀄",
@@ -280,7 +282,7 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
     },
 ```
 
-The classes of the module: the state (`active`, `idle`, `announced`,
+The classes of the module: the state (`active`, `idle`, `announced`, `held`,
 `unknown`), what holds the system (`own`, `other`, `session-other`,
 `session-own`, `none`, `hidden`) and the power (`battery`, `ac`).
 
