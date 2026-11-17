@@ -359,7 +359,7 @@ async fn drowse_inhibit_on_a_bus() {
                 row.3.as_str()
             ),
             (
-                "sleep:shutdown",
+                "idle",
                 "until sh -c 'sleep 3 & exit 3'",
                 "held by hand",
                 "block-weak"
@@ -402,4 +402,10 @@ async fn drowse_inhibit_on_a_bus() {
         String::from_utf8(off.stdout).unwrap(),
         "drowse-inhibit: nothing to let go\n"
     );
+
+    let both = drowse_inhibit(&daemon.address, &["--all", "--", "true"]).await;
+    assert_eq!(both.status.code(), Some(0), "{both:?}");
+    let taken = inhibitors.lock().unwrap();
+    assert!(taken.iter().any(|item| item.row.0 == "idle"));
+    assert!(taken.iter().any(|item| item.row.0 == "sleep:shutdown"));
 }

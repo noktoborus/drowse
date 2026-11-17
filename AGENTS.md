@@ -32,9 +32,9 @@ RULE lang = rust, edition 2024: the service and the tools of the user
 RULE settings : the service has system settings only; a user has none
 WHY  with nobody logged in, or with two users, there is no one user to
      take the settings from
-RULE idle.source = the sessions of logind and its inhibitors of `idle`,
-     `sleep` and `shutdown`, whatever the action is; a session in the
-     state `closing` is left out; a session of a class not in
+RULE idle.source = the sessions of logind; inhibitors hold entry by the
+     kind of its section; a session in the state `closing` is left out;
+     a session of a class not in
      `sessions.classes`
      is left out; the service counts no activity of its own
 WHY  logind counts every session alike: sway, a console, ssh; but it also
