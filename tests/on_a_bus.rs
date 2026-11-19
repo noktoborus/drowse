@@ -559,3 +559,79 @@ async fn drowsed_reads_logind_only_for_the_signals_it_needs() {
         .unwrap();
     assert!(ended.success());
 }
+
+/// The next line of a program, waited for off the thread of the mocks.
+async fn next_line(
+    read: std::sync::mpsc::Receiver<String>,
+) -> (String, std::sync::mpsc::Receiver<String>) {
+    tokio::task::spawn_blocking(move || {
+        let line = read.recv_timeout(Duration::from_secs(5)).unwrap();
+        (line, read)
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+#[ignore = "needs dbus-daemon"]
+async fn drowse_status_follows_the_values_of_the_signals() {
+    let daemon = daemon();
+    let busy = Busy::default();
+    let mocks = serve(&daemon.address, &Inhibitors::default(), &busy).await;
+    let mut drowsed = Command::new(env!("CARGO_BIN_EXE_drowsed"))
+        .env("DBUS_SYSTEM_BUS_ADDRESS", &daemon.address)
+        .spawn()
+        .unwrap();
+    let client = Builder::address(daemon.address.as_str())
+        .build()
+        .await
+        .unwrap();
+    let dbus = zbus::fdo::DBusProxy::new(&client).await.unwrap();
+    for _ in 0..50 {
+        if dbus
+            .name_has_owner("io.github.noktoborus.Drowse".try_into().unwrap())
+            .await
+            .unwrap()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let mut status = Command::new(env!("CARGO_BIN_EXE_drowse-status"))
+        .args(["--waybar", "--follow"])
+        .env("DBUS_SYSTEM_BUS_ADDRESS", &daemon.address)
+        .env("LANG", "C")
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let (lines, read) = std::sync::mpsc::channel();
+    let out = BufReader::new(status.stdout.take().unwrap());
+    std::thread::spawn(move || {
+        for line in out.lines().map_while(std::io::Result::ok) {
+            if lines.send(line).is_err() {
+                return;
+            }
+        }
+    });
+    let (first, read) = next_line(read).await;
+    assert!(first.contains("\"alt\":\"idle\""), "{first}");
+    busy.store(true, Ordering::SeqCst);
+    changed(
+        &mocks[0],
+        "/org/freedesktop/login1",
+        "org.freedesktop.login1.Manager",
+        "IdleHint",
+    )
+    .await;
+    let (next, _) = next_line(read).await;
+    assert!(next.contains("\"class\":[\"active\""), "{next}");
+    let _ = status.kill();
+    let _ = status.wait();
+    let _ = Command::new("kill")
+        .args(["-TERM", &drowsed.id().to_string()])
+        .status();
+    let ended = tokio::task::spawn_blocking(move || drowsed.wait().unwrap())
+        .await
+        .unwrap();
+    assert!(ended.success());
+}
