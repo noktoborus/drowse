@@ -87,12 +87,12 @@ next section of `main.battery`, after the one for `cm5-powersave`:
 main:
   battery:
     - after: 10m
-      enter: tuned-adm profile cm5-powersave
-      leave: systemctl try-restart tuned-ppd.service
+      enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave
+      leave: /usr/libexec/drowse/drowsed-tuned leave
       hint: power save
     - after: 10m
-      enter: tuned-adm profile cm5-powersave-no-radio
-      leave: systemctl try-restart tuned-ppd.service
+      enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave-no-radio
+      leave: /usr/libexec/drowse/drowsed-tuned leave
       hint: radio off
     - after: 28m
       countdown: 2m
@@ -113,11 +113,19 @@ cp -r /usr/share/doc/drowse-*/examples/tuned/cm5-powersave \
 With no such profile the power save fails, and the `poweroff` still
 comes. It needs:
 
-- tuned with tuned-ppd. tuned-ppd keeps the profile the user chose, and
-  `systemctl try-restart tuned-ppd.service` (`leave`) sets it again.
-  With tuned and no tuned-ppd, set `leave: tuned-adm profile
-  <the profile>`. With no tuned the power save fails, and the `poweroff`
+- tuned. `drowsed-tuned enter` keeps the profile before and sets the one
+  of the section; `drowsed-tuned leave` gives the one before back, the
+  mode `auto` as `auto`. If the profile was changed while the section
+  was entered (by the user, by tuned-ppd), it is not given back, and the
+  journal of the unit says so. With tuned-ppd the profile before may be
+  one of the other power source: the power changed while the section
+  was entered. With no tuned the power save fails, and the `poweroff`
   still comes.
+- Another way, with tuned-ppd: `enter: tuned-adm profile cm5-powersave`,
+  `leave: systemctl try-restart tuned-ppd.service`. tuned-ppd sets at
+  its start the profile the user chose, for the power source now. It
+  works only if tuned-ppd sets the profile again at its start, and the
+  restart must end in the time of the `leave`.
 - `arm_freq_min=800` or lower in `config.txt`. cpufreq keeps the limit
   inside the range of the firmware, and the default lowest of the CM5 is
   1500 MHz.
@@ -135,7 +143,7 @@ in `/etc/drowse.yaml`.
 
 ### The commands of the sections: short
 
-A command section (`enter`, `leave`) has 5 s to run; past it systemd
+A command section (`enter`, `leave`) has 15 s to run; past it systemd
 kills it, and a killed `enter` has no `leave`. A long task
 does not belong in a section: start it from a unit or a timer of its own.
 

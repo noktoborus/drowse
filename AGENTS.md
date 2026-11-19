@@ -28,6 +28,13 @@ RULE requirements = REQUIREMENTS.md, what the service does
 THEN change it with the service, in the same commit
 RULE device = the first device is the ClockworkPi uConsole with a CM5
 RULE lang = rust, edition 2024: the service and the tools of the user
+RULE lang.helper = POSIX sh: a helper a section runs, for one program
+     of the system
+EX+  libexec/drowsed-tuned: the profile of TuneD kept and given back
+RULE helper.state : a helper keeps its state in `$RUNTIME_DIRECTORY`,
+     the directory of the unit of its section
+WHY  systemd makes it empty at the start of the unit and deletes it after
+     its stop: no state outlives its section
 
 RULE settings : the service has system settings only; a user has none
 WHY  with nobody logged in, or with two users, there is no one user to
@@ -121,6 +128,7 @@ THEN cargo fmt --all
      cargo test
      cargo test -- --ignored        with dbus-daemon: the programs on a
                                     bus of their own, with mocks
+     shellcheck libexec/*
      ! cargo tree -e normal,build --depth 1 --prefix none \
          | grep -E '^(libc|nix) v'
 RULE format.tool = rustfmt with its defaults, no `rustfmt.toml`
@@ -149,7 +157,8 @@ RULE layout.notes = notes/<question>.md, one file per question; a fact is
 RULE layout.system : the files of the system are in a directory by
      where they go: `dbus/` the policy of D-Bus, `systemd/` the units,
      `preset/` the preset, `etc/` the settings file, `waybar/` the
-     module of waybar; each file named as it is installed
+     module of waybar, `libexec/` the helpers of the sections
+     (`/usr/libexec/drowse/`); each file named as it is installed
 RULE layout.examples = examples/, files the user copies by hand; the
      package installs them with the documentation, never in the system
      by default

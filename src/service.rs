@@ -18,7 +18,7 @@ use crate::world::{Event, Login, Power, Refusal, Units};
 use crate::{bus, journal};
 
 /// How long the stop of the service waits for `leave` commands.
-const STOP_WAIT: Duration = Duration::from_secs(10);
+const STOP_WAIT: Duration = Duration::from_secs(20);
 
 /// The time of `CLOCK_MONOTONIC`.
 pub trait Clock {

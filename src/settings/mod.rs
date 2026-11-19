@@ -165,7 +165,7 @@ mod tests {
             SectionKind::Command {
                 enter: Some(command),
                 leave: Some(_),
-            } if command.line() == "tuned-adm profile cm5-powersave"
+            } if command.line() == "/usr/libexec/drowse/drowsed-tuned enter cm5-powersave"
         ));
         assert_eq!(battery[1].after, Span::Time(Duration::from_secs(38 * 60)));
         assert_eq!(battery[1].countdown, Span::Time(Duration::from_secs(120)));

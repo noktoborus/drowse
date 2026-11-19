@@ -163,10 +163,15 @@ at a time while the system stays idle. A section has `after`,
   up in `PATH` of the unit.
 - The service does not wait for the end of a command. Its exit code
   gives nothing; its output is in the journal of the unit.
-- A command has 5 s to run (`TimeoutStartSec=5s`), its `leave` 5 s
-  (`TimeoutStopSec=5s`). Past it systemd kills it: a warning in the
+- A command has 15 s to run (`TimeoutStartSec=15s`), its `leave` 15 s
+  (`TimeoutStopSec=15s`). Past it systemd kills it: a warning in the
   journal; a killed `enter` has no `leave`. A long task does not
   belong in a section.
+- The unit gives the command a directory of its own,
+  `/run/drowse/<section>` (`RuntimeDirectory=drowse/%i`, in
+  `$RUNTIME_DIRECTORY`): made empty at its start, kept while the section
+  is entered, deleted after its stop. `enter` keeps there what `leave`
+  needs.
 - A section with no `enter` but a `leave` has a unit too: its start runs
   nothing, its stop runs `leave`.
 - `leave` runs whenever an entered section is left: before the next one
@@ -185,8 +190,8 @@ at a time while the system stays idle. A section has `after`,
   comes as if the action had run.
 - At its stop (a sleep, `systemctl stop`, a restart) the service waits
   for the commands that run, stops every unit of a section that ran (so
-  their `leave` runs), then exits: at most 10 s
-  (`TimeoutStopSec=10s`). At its start it stops every unit of a section
+  their `leave` runs, 20 s at most), then exits: at most 30 s
+  (`TimeoutStopSec=30s`). At its start it stops every unit of a section
   that is left from before.
 
 ### Sleep
@@ -302,7 +307,7 @@ It writes:
   there, so the power is taken as AC; an action that logind refuses,
   with its answer.
 - **A command of a section**: started; its `leave`; a stop that waits for
-  a command that still runs; a command killed past its 5 s.
+  a command that still runs; a command killed past its 15 s.
 
 A source that comes back is written once, too.
 
@@ -368,15 +373,15 @@ sessions:
 sections:
   - &mute-powersave
     after: 10m
-    enter: tuned-adm profile cm5-powersave-no-radio
-    leave: systemctl try-restart tuned-ppd.service
+    enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave-no-radio
+    leave: /usr/libexec/drowse/drowsed-tuned leave
     hint: radio off
 
 main:
   battery:
     - after: 10m
-      enter: tuned-adm profile cm5-powersave
-      leave: systemctl try-restart tuned-ppd.service
+      enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave
+      leave: /usr/libexec/drowse/drowsed-tuned leave
       hint: power save
     - after: 38m
       countdown: 2m
@@ -418,12 +423,19 @@ The mapping `sessions`, one key:
   than the start. An announce that ran before the restart is gone.
 - The settings are in `/etc/drowse.yaml`. There are no drop-ins. With
   no file, the chains are empty.
-- The package installs the file with its sections: on battery
-  `tuned-adm profile cm5-powersave` at 10 min of idle (no
-  announce, `leave: systemctl try-restart tuned-ppd.service`), then
+- The package installs the file with its sections: on battery the
+  profile of TuneD `cm5-powersave` at 10 min of idle, by
+  `drowsed-tuned` (no announce), then
   `poweroff` 38 min later with an announce of 2 min, at 50 min of idle;
   on AC nothing. Every other key is there with its default in a comment.
   With no tuned the first command fails, and the `poweroff` still comes.
+- `drowsed-tuned enter <profile>...` (`/usr/libexec/drowse/`) keeps the
+  profile and the mode of TuneD before and the profile set in the
+  directory of the unit, then sets the profile. `drowsed-tuned leave`
+  gives the profile before back (`tuned-adm auto_profile` for the mode
+  `auto`, `tuned-adm off` for none), only when the profile set is still
+  active in the mode `manual`. Else someone changed it: it stays, and
+  the journal of the unit says so.
 - The package gives the profile of TuneD `cm5-powersave` as an
   example (`examples/tuned/`, installed with the documentation): for
   the BCM2712, `powersave`, the CPU at 800 MHz at most, USB autosuspend

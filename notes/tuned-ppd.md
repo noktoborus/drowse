@@ -80,6 +80,10 @@ save of Wi-Fi? Read on 2026-11-16 in tuned, branch main, commit
 
 - A section with a profile that maps to none of PPD, and `leave` a restart
   of tuned-ppd, gives back the profile the user chose (the example
-  `examples/tuned/cm5-powersave`).
+  `examples/tuned/cm5-powersave`) by the source. On the uConsole
+  (2026-11-19) the profile was not given back at a stop of drowsed.
+  So the package gives `drowsed-tuned`: it keeps the profile before
+  itself and gives it back with `tuned-adm`, with no restart of
+  tuned-ppd. The restart stays in README.md as another way.
 - The script of `powersave`, included by such a profile, runs too; the
   branch `plans` holds the question of the power save of Wi-Fi.
