@@ -168,8 +168,8 @@ async fn activity_cancels_and_the_stages_run_their_resume() {
     assert_eq!(
         *world.jobs.borrow(),
         [
-            "start drowsed-stage@battery-0.service",
-            "stop drowsed-stage@battery-0.service"
+            "start drowsed-stage@main.battery.1.service",
+            "stop drowsed-stage@main.battery.1.service"
         ]
     );
     assert!(world.acted.borrow().is_empty());
@@ -193,8 +193,8 @@ async fn the_stop_of_the_service_runs_the_resume() {
     assert_eq!(
         *world.jobs.borrow(),
         [
-            "start drowsed-stage@ac-0.service",
-            "stop drowsed-stage@ac-0.service"
+            "start drowsed-stage@main.ac.1.service",
+            "stop drowsed-stage@main.ac.1.service"
         ]
     );
 }

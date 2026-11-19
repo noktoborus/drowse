@@ -104,8 +104,8 @@ main:
   ac: [{}]
 ";
 
-const POWER_SAVE: &str = "drowsed-stage@battery-0.service";
-const RADIO_OFF: &str = "drowsed-stage@battery-1.service";
+const POWER_SAVE: &str = "drowsed-stage@main.battery.1.service";
+const RADIO_OFF: &str = "drowsed-stage@main.battery.2.service";
 
 #[test]
 fn an_announce_then_power_off() {
@@ -207,14 +207,22 @@ fn an_idle_inhibitor_holds_a_command_and_release_enters_it() {
         },
     );
     let out = engine.on_due(mins(1));
-    assert!(has_line(&out, Level::Info, "held: foo by drowse-inhibit"));
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "held: main.battery.1 (foo) by drowse-inhibit"
+    ));
     assert!(jobs(&out).is_empty());
     assert_eq!(engine.view().state, State::Held);
     assert_eq!(engine.view().scheduled.1, 0);
     assert_eq!(engine.view().inhibitors.len(), 1);
     assert_eq!(engine.next_due(), None);
     let out = engine.on_snapshot(mins(2), idle_world(0));
-    assert!(has_line(&out, Level::Info, "released: foo now"));
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "released: main.battery.1 (foo) now"
+    ));
     assert_eq!(jobs(&out), [Job::Start(POWER_SAVE.to_owned())]);
 }
 
@@ -260,10 +268,14 @@ fn an_inhibitor_during_announce_does_not_cancel_it() {
     assert!(out.is_empty());
     assert_eq!(engine.view().state, State::Announced);
     let out = engine.on_due(mins(2));
-    assert!(has_line(&out, Level::Info, "held: foo"));
+    assert!(has_line(&out, Level::Info, "held: main.battery.1 (foo) by"));
     assert_eq!(engine.view().state, State::Announced);
     let out = engine.on_snapshot(mins(3), idle_world(0));
-    assert!(has_line(&out, Level::Info, "released: foo now"));
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "released: main.battery.1 (foo) now"
+    ));
     assert!(jobs(&out).contains(&Job::Start(POWER_SAVE.to_owned())));
 }
 
@@ -275,10 +287,18 @@ fn a_logind_inhibition_waits_for_release() {
     let out = engine.on_due(mins(1));
     assert_eq!(logind_actions(&out), [LogindAction::Poweroff]);
     let out = engine.on_action_blocked(mins(1), vec![inhibitor("shutdown", "block-weak")]);
-    assert!(has_line(&out, Level::Info, "held: poweroff"));
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "held: main.battery.1 (poweroff) by"
+    ));
     assert_eq!(engine.next_due(), None);
     let out = engine.on_snapshot(mins(2), idle_world(0));
-    assert!(has_line(&out, Level::Info, "released: poweroff now"));
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "released: main.battery.1 (poweroff) now"
+    ));
     assert_eq!(logind_actions(&out), [LogindAction::Poweroff]);
 }
 

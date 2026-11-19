@@ -177,10 +177,10 @@ impl TryFrom<RawFile> for SettingsFile {
         for (index, section) in raw.sections.into_iter().enumerate() {
             sections.push(Section::from_raw(
                 section,
-                &format!("sections[{}]", index + 1),
+                &format!("sections.{}", index + 1),
             )?);
         }
-        let main = raw.main.into_chains("main")?;
+        let main = raw.main.into_chains(super::MAIN)?;
         let lid = raw
             .lid
             .map(|chains| chains.into_chains("lid"))
@@ -196,7 +196,7 @@ impl TryFrom<RawFile> for SettingsFile {
             main,
             lid,
         };
-        validate_last_actions(&file.main, "main")?;
+        validate_last_actions(&file.main, super::MAIN)?;
         if let Some(lid) = &file.lid {
             validate_last_actions(lid, "lid")?;
         }
@@ -217,7 +217,7 @@ fn build_chain(raw: Vec<RawSection>, parent: &str, power: &str) -> Result<Vec<Se
     raw.into_iter()
         .enumerate()
         .map(|(index, section)| {
-            Section::from_raw(section, &format!("{parent}.{power}[{}]", index + 1))
+            Section::from_raw(section, &format!("{parent}.{power}.{}", index + 1))
         })
         .collect()
 }

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 pub use units::{Job, unit_name};
 
-use crate::settings::{LogindAction, Power, Section, SectionKind, Settings, Span};
+use crate::settings::{LogindAction, Power, Section, SectionKind, Settings, Span, section_name};
 use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
@@ -443,7 +443,7 @@ impl Engine {
             let inhibitors = held_by(section, &self.snapshot.inhibitors);
             if inhibitors.is_empty() {
                 if logged {
-                    out.push(info(format!("released: {} now", section.shown_name())));
+                    out.push(info(format!("released: {} now", self.named(stage))));
                 }
                 self.phase = if announced && at > now {
                     Phase::Announced { stage, at }
@@ -456,7 +456,7 @@ impl Engine {
                 };
             } else {
                 if !logged {
-                    out.push(held_line(section, &inhibitors[0]));
+                    out.push(held_line(&self.named(stage), &inhibitors[0]));
                     self.phase = Phase::Held {
                         stage,
                         at,
@@ -519,7 +519,8 @@ impl Engine {
             return;
         }
         out.push(info(format!(
-            "section {stage}: waits for the leave of the section before"
+            "section {}: waits for the leave of the section before",
+            self.named(stage)
         )));
         self.stop_units(now, out);
         self.phase = Phase::Waiting {
@@ -550,14 +551,14 @@ impl Engine {
                 enter: None,
                 leave: None,
             } => {
-                out.push(info(format!("section {stage}: entered, no action")));
+                out.push(info(format!(
+                    "section {}: entered, no action",
+                    self.named(stage)
+                )));
             }
             SectionKind::Command { .. } => {
                 let unit = unit_name(section(self.power), stage);
-                out.push(info(format!(
-                    "section {stage} ({}): started",
-                    this.shown_name()
-                )));
+                out.push(info(format!("section {}: started", self.named(stage))));
                 out.extend(self.units.want_up(&unit, now).into_iter().map(Command::Job));
             }
         }
@@ -582,6 +583,16 @@ impl Engine {
             )));
         }
         out.extend(jobs.into_iter().map(Command::Job));
+    }
+
+    /// A section for the journal: its name as in the file, and what it
+    /// does: `main.battery.1 (power save)`.
+    fn named(&self, stage: usize) -> String {
+        let name = section_name(section(self.power), stage);
+        match self.sections().get(stage).map(Section::shown_name) {
+            Some(shown) if !shown.is_empty() => format!("{name} ({shown})"),
+            _ => name,
+        }
     }
 
     /// The sections of the power source now.
@@ -616,7 +627,7 @@ impl Engine {
         if inhibitors.is_empty() {
             return false;
         }
-        out.push(held_line(section, &inhibitors[0]));
+        out.push(held_line(&self.named(stage), &inhibitors[0]));
         self.phase = Phase::Held {
             stage,
             at: 0,
@@ -718,15 +729,12 @@ fn hold_of(section: &Section) -> Option<Hold> {
 }
 
 /// The journal line for an entry that waits for an inhibitor.
-fn held_line(section: &Section, inhibitor: &Inhibitor) -> Command {
+fn held_line(named: &str, inhibitor: &Inhibitor) -> Command {
     Command::Journal(
         Level::Info,
         format!(
-            "held: {} by {} (uid {}): \"{}\"",
-            section.shown_name(),
-            inhibitor.who,
-            inhibitor.uid,
-            inhibitor.why
+            "held: {named} by {} (uid {}): \"{}\"",
+            inhibitor.who, inhibitor.uid, inhibitor.why
         ),
     )
 }

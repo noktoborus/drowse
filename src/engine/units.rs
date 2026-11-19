@@ -3,17 +3,18 @@
 
 use std::collections::BTreeMap;
 
-use crate::settings::Power;
+use crate::settings::{Power, section_name};
 
-/// The name of the unit of a stage: `drowsed-stage@battery-1.service`.
+/// The name of the unit of a stage, by the name of its section:
+/// `drowsed-stage@main.battery.2.service`.
 pub fn unit_name(power: Power, stage: usize) -> String {
-    format!("drowsed-stage@{}-{stage}.service", power.instance())
+    format!("drowsed-stage@{}.service", section_name(power, stage))
 }
 
 /// The number of the stage of a unit, from its name; 0 when it has none.
 fn stage_number(name: &str) -> usize {
     name.trim_end_matches(".service")
-        .rsplit('-')
+        .rsplit('.')
         .next()
         .and_then(|number| number.parse().ok())
         .unwrap_or(0)
@@ -189,13 +190,13 @@ impl Units {
 mod tests {
     use super::*;
 
-    const A: &str = "drowsed-stage@battery-0.service";
-    const B: &str = "drowsed-stage@battery-1.service";
+    const A: &str = "drowsed-stage@main.battery.1.service";
+    const B: &str = "drowsed-stage@main.battery.2.service";
 
     #[test]
     fn names() {
         assert_eq!(unit_name(Power::Battery, 0), A);
-        assert_eq!(unit_name(Power::Ac, 2), "drowsed-stage@ac-2.service");
+        assert_eq!(unit_name(Power::Ac, 2), "drowsed-stage@main.ac.3.service");
     }
 
     #[test]
@@ -260,7 +261,7 @@ mod tests {
     #[test]
     fn the_order_is_by_number() {
         let mut units = Units::default();
-        let ten = "drowsed-stage@battery-10.service";
+        let ten = "drowsed-stage@main.battery.11.service";
         for name in [A, B, ten] {
             units.want_up(name, 0);
             units.job_ended(name, true, 1);

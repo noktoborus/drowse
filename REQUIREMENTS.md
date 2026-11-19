@@ -149,8 +149,13 @@ at a time while the system stays idle. A section has `after`,
   `hibernate`, `hybrid-sleep`, `suspend-then-hibernate`, `sleep`. The
   service calls it through logind (`*WithFlags`,
   `SD_LOGIND_ROOT_CHECK_INHIBITORS`). It has no `leave` command.
-- A command runs in `drowsed-stage@.service` (instance `battery-0`,
-  `battery-1`, `ac-0`, …), which runs `drowsed stage enter <instance>`;
+- A section has one name, as it stands in the file: the chain, the power
+  source, the number from 1 (`main.battery.1`, `main.battery.2`,
+  `main.ac.1`). The journal, the unit and the errors of the settings
+  give this name.
+- A command runs in `drowsed-stage@.service` (instance `main.battery.1`,
+  `main.battery.2`, `main.ac.1`, …: the name of the section), which runs
+  `drowsed stage enter <instance>`;
   `leave` runs when the unit stops, as `drowsed stage leave <instance>`.
   `drowsed stage` reads the command from `/etc/drowse.yaml`, splits it
   as a shell does (no shell
@@ -313,9 +318,11 @@ inhibitors let go: a new count
 power: AC; the times moved
 idle, on AC: no action
 upower: no answer; the power is taken as AC
-section 1 (radio off): started
-drowsed-stage@battery-1.service: the command still runs after 4 s; its leave waits
-drowsed-stage@battery-1.service: the command ended; its leave runs late
+section main.battery.1 (radio off): started
+held: main.battery.2 (poweroff) by drowse-inhibit (uid 1000): "held by hand"
+released: main.battery.2 (poweroff) now
+drowsed-stage@main.battery.1.service: the command still runs after 4 s; its leave waits
+drowsed-stage@main.battery.1.service: the command ended; its leave runs late
 suspend refused by logind: org.freedesktop.login1.SleepVerbNotSupported: Sleep verb 'suspend' is not configured or configuration is not supported by kernel
 ```
 

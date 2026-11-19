@@ -127,11 +127,9 @@ impl fmt::Display for Error {
             Self::SettingsActionUnknown { action, place } => {
                 write!(f, "unknown logind action {action} in {place}")
             }
-            Self::SettingsActionNotLast { chain, section } => write!(
-                f,
-                "logind action in section {} of chain {chain} is not last",
-                section + 1
-            ),
+            Self::SettingsActionNotLast { chain, section } => {
+                write!(f, "logind action in {chain}.{} is not last", section + 1)
+            }
             Self::SettingsCommand { command, place } => {
                 write!(f, "invalid command in {place}: {command}")
             }

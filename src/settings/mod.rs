@@ -17,6 +17,33 @@ use crate::error::{Error, Result};
 /// The path of the settings file.
 pub const PATH: &str = "/etc/drowse.yaml";
 
+/// The chain the service runs.
+pub const MAIN: &str = "main";
+
+/// The name of a section, as it stands in the file: the chain, the power
+/// source, the number from 1. The journal, the unit and the errors of the
+/// settings give it alike.
+pub fn section_name(power: Power, index: usize) -> String {
+    format!("{MAIN}.{}.{}", power.instance(), index + 1)
+}
+
+/// The power source and the index of a section, from its name.
+pub fn parse_section_name(name: &str) -> Option<(Power, usize)> {
+    let rest = name.strip_prefix(MAIN)?.strip_prefix('.')?;
+    let (power, number) = rest.split_once('.')?;
+    if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let power = Power::ALL
+        .into_iter()
+        .find(|known| known.instance() == power)?;
+    number
+        .parse::<usize>()
+        .ok()?
+        .checked_sub(1)
+        .map(|index| (power, index))
+}
+
 /// A power source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Power {
@@ -30,7 +57,7 @@ impl Power {
     /// Both power sources.
     pub const ALL: [Self; 2] = [Self::Battery, Self::Ac];
 
-    /// The name in an instance of a unit of a stage: `battery`, `ac`.
+    /// The name in the file and in the name of a section: `battery`, `ac`.
     pub fn instance(self) -> &'static str {
         match self {
             Self::Battery => "battery",
@@ -98,6 +125,26 @@ pub fn parse(text: &str) -> Result<Settings> {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn a_section_has_one_name_in_the_file_the_unit_and_the_errors() {
+        assert_eq!(section_name(Power::Battery, 0), "main.battery.1");
+        assert_eq!(section_name(Power::Ac, 2), "main.ac.3");
+        for power in Power::ALL {
+            for index in [0, 1, 9] {
+                let name = section_name(power, index);
+                assert_eq!(parse_section_name(&name), Some((power, index)));
+            }
+        }
+        assert_eq!(
+            crate::engine::unit_name(Power::Battery, 1),
+            "drowsed-stage@main.battery.2.service"
+        );
+        let error = parse("main:\n  battery: [{after: 1m}, {after: 1m, action: nap}]\n")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(&section_name(Power::Battery, 1)), "{error}");
+    }
 
     #[test]
     fn no_file_is_empty() {
