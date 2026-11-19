@@ -35,6 +35,11 @@ pub enum Error {
         /// The name of the section: `main.battery.1`.
         place: String,
     },
+    /// The verbosity in the settings is not a level of the journal.
+    SettingsVerbosity {
+        /// The name as written.
+        name: String,
+    },
     /// A command in the settings cannot be split into words.
     SettingsCommand {
         /// The command as written.
@@ -128,6 +133,10 @@ impl fmt::Display for Error {
             Self::SettingsActionNotLast { place } => {
                 write!(f, "logind action in {place} is not last")
             }
+            Self::SettingsVerbosity { name } => write!(
+                f,
+                "unknown verbosity {name}: not debug, info, notice or warning"
+            ),
             Self::SettingsCommand { command, place } => {
                 write!(f, "invalid command in {place}: {command}")
             }
@@ -165,6 +174,7 @@ impl std::error::Error for Error {
             | Self::SettingsActionUnknown { .. }
             | Self::SettingsActionNotLast { .. }
             | Self::SettingsCommand { .. }
+            | Self::SettingsVerbosity { .. }
             | Self::LogindGone
             | Self::HolderGone
             | Self::InhibitRefused { .. } => None,

@@ -379,11 +379,23 @@ bus are of `CLOCK_MONOTONIC`.
 The levels: a change of state is `info`; a cancel is `notice`; a source
 not there, a refusal, a command that waits or is killed is `warning`.
 
+A line that changes nothing outside the service is `debug`:
+
+- `idle, on …`: a count starts;
+- `cancel:` of a count, with no section entered, no announce and no
+  entry held in the journal; a cancel of those is `notice`;
+- `section …: waits for the leave of the section before`;
+- `power: …` or `lid: …; the times moved` while not idle.
+
+The least level written is the verbosity: `verbosity` of the settings
+file, or `drowsed --verbosity debug|info|notice|warning` in its place.
+It is `info` when neither sets it. An error is always written.
+
 ## Settings
 
 System settings only. A user has no settings of their own in the service.
 
-The file is `/etc/drowse.yaml`. It has `sessions.classes`, an optional
+The file is `/etc/drowse.yaml`. It has `verbosity`, `sessions.classes`, an optional
 `sections` library, and `main` and optional `lid` chains. Each chain has
 `battery` and `ac` lists. A chain not set is empty. `lid` is used with
 the lid closed (see "The lid"). With no file or an

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 pub use units::{Job, unit_name};
 
+pub use crate::journal::Level;
 use crate::settings::{Chain, Group, LogindAction, Power, Section, SectionKind, Settings, Span};
 use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
@@ -71,17 +72,6 @@ pub struct View {
     pub power: PowerSource,
     /// Whether the lid is closed, as logind says.
     pub lid_closed: bool,
-}
-
-/// The level of a line of the journal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Level {
-    /// A change of state.
-    Info,
-    /// A cancel.
-    Notice,
-    /// A source not there, a refusal, a command that waits or is killed.
-    Warning,
 }
 
 /// What the driver does.
@@ -436,7 +426,7 @@ impl Engine {
         if !self.is_idle() {
             if self.phase != Phase::Active {
                 out.push(Command::Journal(
-                    Level::Notice,
+                    self.cancel_level(),
                     format!("cancel: {}", self.what_holds()),
                 ));
                 self.stop_units(now, out);
@@ -454,7 +444,7 @@ impl Engine {
                 stage: 0,
                 base: start,
             };
-            out.push(info(self.idle_line(now)));
+            out.push(debug(self.idle_line(now)));
         }
         if let Phase::Held {
             stage,
@@ -544,7 +534,7 @@ impl Engine {
             self.enter(stage, now, out);
             return;
         }
-        out.push(info(format!(
+        out.push(debug(format!(
             "section {}: waits for the leave of the section before",
             self.named(stage)
         )));
@@ -624,7 +614,12 @@ impl Engine {
             return;
         }
         self.activity = now;
-        out.push(info(format!("{what}; the times moved")));
+        let level = if self.phase == Phase::Active {
+            Level::Debug
+        } else {
+            Level::Info
+        };
+        out.push(Command::Journal(level, format!("{what}; the times moved")));
     }
 
     /// The stage of `before` that is entered and the unit that runs it,
@@ -774,6 +769,18 @@ impl Engine {
         "activity".to_owned()
     }
 
+    /// The level of a cancel: `notice` when it cancels something, a
+    /// section entered, an announce or an entry held in the journal;
+    /// `debug` when only a count ran.
+    fn cancel_level(&self) -> Level {
+        let held_in_journal = matches!(self.phase, Phase::Held { logged: true, .. });
+        if self.entered(self.chain()).is_some() || self.was_announced() || held_in_journal {
+            Level::Notice
+        } else {
+            Level::Debug
+        }
+    }
+
     /// The line of the journal when the system becomes idle.
     fn idle_line(&self, now: u64) -> String {
         let (name, at) = self.scheduled();
@@ -869,6 +876,11 @@ fn human(duration: Duration) -> String {
         60..3600 => format!("{} min", seconds.div_ceil(60)),
         _ => format!("{} h {} min", seconds / 3600, (seconds % 3600) / 60),
     }
+}
+
+/// A line of the journal at the level `debug`.
+fn debug(text: String) -> Command {
+    Command::Journal(Level::Debug, text)
 }
 
 /// A line of the journal at the level `info`.
