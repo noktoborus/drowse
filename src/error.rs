@@ -68,6 +68,9 @@ pub enum Error {
     },
     /// logind left the bus: the service exits, and systemd starts it again.
     LogindGone,
+    /// The connection to the system bus ended: the service exits, and
+    /// systemd starts it again.
+    BusGone,
     /// The agent of polkit on the terminal cannot be started.
     Agent {
         /// The error of the system.
@@ -144,6 +147,7 @@ impl fmt::Display for Error {
             Self::SessionMonitor { .. } => f.write_str("cannot start the monitor of sd-login"),
             Self::Signal { name, .. } => write!(f, "cannot follow {name}"),
             Self::LogindGone => f.write_str("logind left the bus"),
+            Self::BusGone => f.write_str("the connection to the system bus ended"),
             Self::Agent { .. } => f.write_str("cannot start pkttyagent"),
             Self::HolderStart { .. } => f.write_str("cannot start the holder of the inhibitor"),
             Self::HolderGone => f.write_str("the holder of the inhibitor ended with no word"),
@@ -176,6 +180,7 @@ impl std::error::Error for Error {
             | Self::SettingsCommand { .. }
             | Self::SettingsVerbosity { .. }
             | Self::LogindGone
+            | Self::BusGone
             | Self::HolderGone
             | Self::InhibitRefused { .. } => None,
         }

@@ -187,6 +187,7 @@ where
                 self.engine.on_job_ended(self.clock.now(), &unit, done)
             }
             Event::LoginGone => return Err(Error::LogindGone),
+            Event::BusGone => return Err(Error::BusGone),
         };
         self.execute(out).await;
         Ok(())

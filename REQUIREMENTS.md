@@ -349,7 +349,8 @@ It writes:
 - **The announce and the action**: the action announced; the action
   done.
 - **Why the action is cancelled**: a session in use (its id, user).
-- **A source that is not there**: logind not on the bus; UPower not
+- **A source that is not there**: logind not on the bus; the connection
+  to the system bus ended; UPower not
   there, so the power is taken as AC; an action that logind refuses,
   with its answer.
 - **A command of a section**: started; its `leave`; a stop that waits for
