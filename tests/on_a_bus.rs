@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader, ErrorKind, Read};
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -30,10 +31,14 @@ impl Taken {
 /// The inhibitors taken of the mock, shared with the test.
 type Inhibitors = Arc<Mutex<Vec<Taken>>>;
 
-/// The mock of the manager of logind: one idle session; the inhibitors
-/// taken of it.
+/// Whether the session of the mock is in use; idle when false.
+type Busy = Arc<AtomicBool>;
+
+/// The mock of the manager of logind: one session, idle until `busy`; the
+/// inhibitors taken of it.
 struct Logind {
     inhibitors: Inhibitors,
+    busy: Busy,
 }
 
 #[interface(name = "org.freedesktop.login1.Manager")]
@@ -61,7 +66,7 @@ impl Logind {
             1,
             "user".to_owned(),
             "tty1".to_owned(),
-            true,
+            !self.busy.load(Ordering::SeqCst),
             0,
             OwnedObjectPath::try_from("/org/freedesktop/login1/session/_31").unwrap(),
         )]
@@ -218,10 +223,11 @@ fn daemon() -> Daemon {
     }
 }
 
-async fn serve(address: &str, inhibitors: &Inhibitors) -> Vec<Connection> {
+async fn serve(address: &str, inhibitors: &Inhibitors, busy: &Busy) -> Vec<Connection> {
     let at = |name: &'static str| Builder::address(address).name(name);
     let logind = Logind {
         inhibitors: Arc::clone(inhibitors),
+        busy: Arc::clone(busy),
     };
     vec![
         at("org.freedesktop.login1")
@@ -247,7 +253,7 @@ async fn serve(address: &str, inhibitors: &Inhibitors) -> Vec<Connection> {
 #[ignore = "needs dbus-daemon"]
 async fn drowsed_and_drowse_status_on_a_bus() {
     let daemon = daemon();
-    let _mocks = serve(&daemon.address, &Inhibitors::default()).await;
+    let _mocks = serve(&daemon.address, &Inhibitors::default(), &Busy::default()).await;
     let mut drowsed = Command::new(env!("CARGO_BIN_EXE_drowsed"))
         .env("DBUS_SYSTEM_BUS_ADDRESS", &daemon.address)
         .spawn()
@@ -364,7 +370,7 @@ async fn own_held(inhibitors: &Inhibitors) -> Vec<String> {
 async fn drowse_inhibit_on_a_bus() {
     let daemon = daemon();
     let inhibitors = Inhibitors::default();
-    let _mocks = serve(&daemon.address, &inhibitors).await;
+    let _mocks = serve(&daemon.address, &inhibitors, &Busy::default()).await;
 
     let ran = drowse_inhibit(&daemon.address, &["--", "sh", "-c", "sleep 3 & exit 3"]).await;
     assert_eq!(ran.status.code(), Some(3), "{ran:?}");
@@ -451,4 +457,105 @@ async fn drowse_inhibit_on_a_bus() {
     let taken = inhibitors.lock().unwrap();
     assert!(taken.iter().any(|item| item.row.0 == "idle"));
     assert!(taken.iter().any(|item| item.row.0 == "shutdown:sleep"));
+}
+
+/// The state of drowsed on the bus.
+async fn state_of(client: &Connection) -> String {
+    let properties = zbus::fdo::PropertiesProxy::builder(client)
+        .destination("io.github.noktoborus.Drowse")
+        .path("/io/github/noktoborus/Drowse")
+        .build()
+        .await
+        .unwrap();
+    let state = properties
+        .get(
+            zbus::names::InterfaceName::from_static_str_unchecked("io.github.noktoborus.Drowse"),
+            "State",
+        )
+        .await
+        .unwrap();
+    String::try_from(state).unwrap()
+}
+
+/// Sends `PropertiesChanged` of one property from the mock of logind.
+async fn changed(logind: &Connection, path: &str, interface: &str, name: &str) {
+    let changed: HashMap<&str, zbus::Variant> = HashMap::from([(name, zbus::Variant::from(false))]);
+    logind
+        .emit_signal(
+            None::<()>,
+            path,
+            "org.freedesktop.DBus.Properties",
+            "PropertiesChanged",
+            &(interface, changed, Vec::<&str>::new()),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "needs dbus-daemon"]
+async fn drowsed_reads_logind_only_for_the_signals_it_needs() {
+    let daemon = daemon();
+    let busy = Busy::default();
+    let mocks = serve(&daemon.address, &Inhibitors::default(), &busy).await;
+    let mut drowsed = Command::new(env!("CARGO_BIN_EXE_drowsed"))
+        .env("DBUS_SYSTEM_BUS_ADDRESS", &daemon.address)
+        .spawn()
+        .unwrap();
+    let client = Builder::address(daemon.address.as_str())
+        .build()
+        .await
+        .unwrap();
+    let dbus = zbus::fdo::DBusProxy::new(&client).await.unwrap();
+    for _ in 0..50 {
+        if dbus
+            .name_has_owner("io.github.noktoborus.Drowse".try_into().unwrap())
+            .await
+            .unwrap()
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(state_of(&client).await, "idle");
+    busy.store(true, Ordering::SeqCst);
+    let logind = &mocks[0];
+    let manager = "org.freedesktop.login1.Manager";
+    changed(
+        logind,
+        "/org/freedesktop/login1/session/_31",
+        "org.freedesktop.login1.Session",
+        "IdleHint",
+    )
+    .await;
+    changed(
+        logind,
+        "/org/freedesktop/login1",
+        manager,
+        "NCurrentInhibitors",
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(
+        state_of(&client).await,
+        "idle",
+        "drowsed read logind for a signal it does not need"
+    );
+    changed(logind, "/org/freedesktop/login1", manager, "IdleHint").await;
+    let mut state = String::new();
+    for _ in 0..50 {
+        state = state_of(&client).await;
+        if state == "active" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(state, "active", "drowsed missed IdleHint of the manager");
+    let _ = Command::new("kill")
+        .args(["-TERM", &drowsed.id().to_string()])
+        .status();
+    let ended = tokio::task::spawn_blocking(move || drowsed.wait().unwrap())
+        .await
+        .unwrap();
+    assert!(ended.success());
 }
