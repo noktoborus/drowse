@@ -15,8 +15,12 @@ use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
-/// The line of the journal when UPower does not answer.
-const UPOWER_GONE: &str = "upower: no answer; the power is taken as AC";
+/// The line of the journal when UPower does not answer; its pair is
+/// `UPOWER_BACK`.
+const UPOWER_GONE: &str = "upower: not on the bus; the power is taken as AC";
+
+/// The line of the journal when UPower answers again.
+const UPOWER_BACK: &str = "upower: back on the bus";
 
 /// The modes of an inhibitor that hold.
 const MODES_THAT_HOLD: [&str; 2] = ["block", "block-weak"];
@@ -193,7 +197,7 @@ impl Engine {
         if power != self.power && power == PowerSource::Unknown {
             out.push(warning(UPOWER_GONE.to_owned()));
         } else if power != self.power && self.power == PowerSource::Unknown {
-            out.push(info("upower: back on the bus".to_owned()));
+            out.push(info(UPOWER_BACK.to_owned()));
         }
         let before = self.chain();
         self.power = power;

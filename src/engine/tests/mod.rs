@@ -627,10 +627,10 @@ fn upower_gone_and_back() {
         0,
         Vec::new(),
     );
-    assert!(has_line(&out, Level::Warning, "upower: no answer"));
+    assert!(has_line(&out, Level::Warning, "upower: not on the bus"));
     let mut engine = engine(TIMES, PowerSource::Ac);
     let out = engine.on_power(0, PowerSource::Unknown);
-    assert!(has_line(&out, Level::Warning, "upower: no answer"));
+    assert!(has_line(&out, Level::Warning, "upower: not on the bus"));
     let out = engine.on_power(1, PowerSource::Ac);
     assert!(has_line(&out, Level::Info, "upower: back"));
 }

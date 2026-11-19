@@ -364,7 +364,8 @@ power: AC; the times moved
 lid: closed; section main.battery.1 (power save) -> lid.battery.1 (power save): the same commands, none run; drowsed-stage@main.battery.1.service runs on
 idle, on battery, the lid closed: power save in 0 s
 idle, on AC: no action
-upower: no answer; the power is taken as AC
+upower: not on the bus; the power is taken as AC
+upower: back on the bus
 section main.battery.1 (power save): started
 held: main.battery.2 (poweroff) by drowse-inhibit (uid 1000): "held by hand"
 released: main.battery.2 (poweroff) now
