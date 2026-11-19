@@ -479,8 +479,8 @@ impl Engine {
             match (self.phase, due) {
                 (Phase::Counting { stage, .. }, Due::Announce) => self.announce(stage, now, out),
                 (Phase::Counting { stage, .. }, Due::Action)
-                | (Phase::Announced { stage, .. }, Due::Action) => self.act(stage, now, out),
-                (Phase::Ready { stage, .. }, Due::Action) => self.enter(stage, now, out),
+                | (Phase::Announced { stage, .. }, Due::Action)
+                | (Phase::Ready { stage, .. }, Due::Action) => self.act(stage, now, out),
                 _ => return,
             }
         }

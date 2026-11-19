@@ -23,6 +23,17 @@ main:
 /// A power off at 2 s of idle, with an announce of 1 s.
 const POWEROFF: &str = "main:\n  battery: [{after: 2s, countdown: 1s, action: poweroff}]\n";
 
+/// Two commands, at 2 s of idle and 2 s after.
+const TWO_COMMANDS: &str = "\
+main:
+  battery:
+    - {after: 2s, enter: tuned-adm profile powersave, leave: tuned-adm auto_profile}
+    - {after: 2s, enter: nmcli radio all off, leave: nmcli radio all on}
+";
+
+/// The start of the unit of `main.battery.2`.
+const START_1: &str = "start drowsed-stage@main.battery.2.service";
+
 /// The start of the unit of `main.battery.1`.
 const START_0: &str = "start drowsed-stage@main.battery.1.service";
 
@@ -164,6 +175,46 @@ async fn both_holds_keep_every_section_out() {
         assert!(s.jobs().is_empty(), "entered under a hold: {:?}", s.jobs());
         assert!(s.acted().is_empty(), "power off under a hold");
         assert_eq!(s.view().state, State::Held);
+    })
+    .await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_power_hold_lets_a_command_section_in_and_holds_poweroff() {
+    let s = Script::new(PowerSource::Battery);
+    s.run(CHAIN, async {
+        s.at(500).await;
+        s.take(inhibitor(POWER, "block-weak"), true);
+        s.at(2_100).await;
+        assert_eq!(s.jobs(), [START_0]);
+        s.at(4_500).await;
+        assert_eq!(s.view().state, State::Announced);
+        s.at(8_000).await;
+        assert!(s.acted().is_empty(), "power off under a hold");
+        assert_eq!(s.jobs(), [START_0], "a hold left the section entered");
+        assert_eq!(s.view().state, State::Announced);
+        assert_eq!(s.view().inhibitors, [inhibitor(POWER, "block-weak")]);
+        s.let_go();
+        s.at(8_500).await;
+        assert_eq!(s.jobs(), [START_0, STOP_0]);
+        assert_eq!(s.acted(), [LogindAction::Poweroff]);
+    })
+    .await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_section_before_is_left_before_a_held_entry_comes_in() {
+    let s = Script::new(PowerSource::Battery);
+    s.run(TWO_COMMANDS, async {
+        s.at(2_500).await;
+        assert_eq!(s.jobs(), [START_0]);
+        s.take(inhibitor(IDLE, "block-weak"), true);
+        s.at(6_000).await;
+        assert_eq!(s.jobs(), [START_0], "a hold left the section entered");
+        assert_eq!(s.view().state, State::Held);
+        s.let_go();
+        s.at(6_500).await;
+        assert_eq!(s.jobs(), [START_0, STOP_0, START_1]);
     })
     .await;
 }
