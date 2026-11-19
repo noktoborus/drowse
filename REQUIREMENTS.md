@@ -20,7 +20,8 @@ source.
   each counted as activity:
   - a session that was not idle leaves the count (`closing`, removed),
     when the service sees it;
-  - the power source changes;
+  - the chain in use changes (the power source, the lid), unless the
+    section entered carries over (see "The chain in use changes");
   - the service starts (see "Sleep").
 - **The move to `closing`** sends no signal on D-Bus. The service learns
   of it by the sd-login monitor (`sd_login_monitor_new("session")`),
@@ -47,10 +48,11 @@ source.
 | Work in any session (sway, console, ssh) | no |
 | All sessions idle, on battery | by `main.battery` |
 | All sessions idle, on AC | by `main.ac` |
+| All sessions idle, the lid closed, `lid:` in the file | by `lid.battery` or `lid.ac` |
 | An ssh connection is open (with a terminal or not) | no |
 | Inhibitor of screen and system | no |
 | Inhibitor of system | no |
-| The charger is put in or taken out while idle | a new count from that moment |
+| The charger is put in or taken out, the lid closed or opened, while idle | the same section carries over, or a new count from that moment |
 | The charge is low or critical | by UPower |
 
 An ssh session is never idle for logind, with a terminal or not
@@ -62,6 +64,20 @@ An ssh session is never idle for logind, with a terminal or not
   (notes/power-source.md).
 - With no UPower (upowerd not running, no answer), the service takes the
   power to be AC. So nothing goes down by the time on battery.
+
+## The lid
+
+- The service takes it from logind: `LidClosed` of the Manager, read at
+  the start and again on each signal of logind (`PropertiesChanged` is
+  sent on its change, notes/logind-interface.md). With no lid it is
+  `false`.
+- With `lid:` in the file, the lid closed picks the group `lid`, the
+  lid open the group `main`. With no `lid:`, the lid is not looked at:
+  `main` always, and a change of the lid is nothing.
+- A chain of `lid` not set (`lid.ac`) is empty; it is not taken from
+  `main`.
+- logind acts on the lid itself (`HandleLidSwitch=`); the service does
+  not hold it. README.md says how to keep logind from it.
 
 ## The part in the session
 
@@ -123,14 +139,28 @@ at a time while the system stays idle. A section has `after`,
 - The journal gets one `held` line per wait and one `released` line when
   a logged hold ends.
 
-### The power source changes
+### The chain in use changes
 
-- A change of the power source is activity: a running announce is
-  cancelled, the section entered is left, and the count
-  starts anew from that moment by the chain of the other power source.
-  The power that goes and comes back again and again (a bad cable) has
-  no rule of its own: each change is activity.
-- The journal gets one line: the power source, and that the times moved.
+The chain in use is picked by the group (`main`, `lid`) and the power
+source. When the power source or the lid changes it:
+
+- If a section is entered (its unit started, its `enter` run or
+  running), and the first section of the new chain has the same `enter`
+  and `leave`, word for word, at least one of them set: that section
+  becomes the first section of the new chain. Neither the `leave` of
+  the one nor the `enter` of the other runs. The next section of the new
+  chain counts its `after` from that moment. `after` of the first
+  section is not waited for, and no hold holds it: nothing runs. The
+  unit that runs stays, named for the section where it started; its
+  `leave` is the same.
+- Else the change is activity: a running announce is cancelled, the
+  section entered is left, and the count starts anew from that moment
+  by the new chain. The power that goes and comes back again and again
+  (a bad cable) has no rule of its own: each change is the same.
+- A change of the power or the lid that leaves the chain as it is (the
+  lid with no `lid:`, the power from AC to not known) is nothing.
+- The journal gets one line: the power source or the lid, and that the
+  times moved, or which section carried over to which.
 
 ### The action itself
 
@@ -228,6 +258,7 @@ the user, a panel) reads it there and does not work it out again.
 | `HeldBySessions` | `a(sussss)`: the sessions that hold the system up; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `HeldByInhibitors` | `a(ssssuu)`: the inhibitors holding the due entry, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `PowerSource` | `s`: `battery`, `ac`, or `unknown` when UPower does not answer (the power is then taken as AC) |
+| `Lid` | `s`: `open` or `closed`, as logind says; `open` with no lid |
 
 - A time is in microseconds of `CLOCK_MONOTONIC`.
 - A session in `HeldBySessions` has the fields of logind as they are:
@@ -321,6 +352,8 @@ cancel: session 4 (alice) in use
 cancel: inhibitor of sleep:shutdown by "drowse-inhibit" (uid 1000): "emerge"
 inhibitors let go: a new count
 power: AC; the times moved
+lid: closed; section main.battery.1 (power save) -> lid.battery.1 (power save): the same commands, none run; drowsed-stage@main.battery.1.service runs on
+idle, on battery, the lid closed: power save in 0 s
 idle, on AC: no action
 upower: no answer; the power is taken as AC
 section main.battery.1 (radio off): started
@@ -343,7 +376,8 @@ System settings only. A user has no settings of their own in the service.
 
 The file is `/etc/drowse.yaml`. It has `sessions.classes`, an optional
 `sections` library, and `main` and optional `lid` chains. Each chain has
-`battery` and `ac` lists. A chain not set is empty. With no file or an
+`battery` and `ac` lists. A chain not set is empty. `lid` is used with
+the lid closed (see "The lid"). With no file or an
 empty file, all chains are empty and the service does nothing.
 
 The keys of a section are:

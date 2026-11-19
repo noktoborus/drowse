@@ -101,6 +101,11 @@ impl Logind {
     }
 
     fn power_off_with_flags(&self, _flags: u64) {}
+
+    #[zbus(property)]
+    fn lid_closed(&self) -> bool {
+        false
+    }
 }
 
 /// The mock of a session of logind.

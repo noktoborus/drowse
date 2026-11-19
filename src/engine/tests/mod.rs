@@ -1,5 +1,7 @@
 //! Tests of the engine: the world is given by hand, the time too.
 
+mod chain;
+
 use super::*;
 use crate::settings;
 
@@ -60,7 +62,7 @@ main:
 
 fn engine(text: &str, power: PowerSource) -> Engine {
     let settings = settings::parse(text).unwrap();
-    Engine::new(settings, power, 0, Vec::new()).0
+    Engine::new(settings, power, false, 0, Vec::new()).0
 }
 
 fn logind_actions(out: &[Command]) -> Vec<LogindAction> {
@@ -130,6 +132,7 @@ fn the_count_starts_no_sooner_than_the_start() {
     let mut engine = Engine::new(
         settings::parse(TIMES).unwrap(),
         PowerSource::Battery,
+        false,
         mins(100),
         Vec::new(),
     )
@@ -570,6 +573,7 @@ fn units_left_from_before_are_stopped_at_the_start() {
     let (engine, out) = Engine::new(
         settings::Settings::default(),
         PowerSource::Ac,
+        false,
         0,
         vec![RADIO_OFF.to_owned()],
     );
@@ -591,6 +595,7 @@ fn upower_gone_and_back() {
     let (_, out) = Engine::new(
         settings::Settings::default(),
         PowerSource::Unknown,
+        false,
         0,
         Vec::new(),
     );

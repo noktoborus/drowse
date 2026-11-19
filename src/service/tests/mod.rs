@@ -1,9 +1,10 @@
 //! Tests of the driver: a mock of the world, the clock of tokio paused.
 
+mod chain;
 mod hold;
 mod script;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::Instant;
@@ -17,7 +18,8 @@ use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 struct MockWorld {
     sessions: RefCell<Vec<Session>>,
     inhibitors: RefCell<Vec<Inhibitor>>,
-    power: PowerSource,
+    lid_closed: Cell<bool>,
+    power: Cell<PowerSource>,
     acted: RefCell<Vec<LogindAction>>,
     jobs: RefCell<Vec<String>>,
     events: UnboundedSender<Event>,
@@ -32,6 +34,10 @@ impl Login for MockWorld {
         Ok(self.inhibitors.borrow().clone())
     }
 
+    async fn lid_closed(&self) -> Result<bool> {
+        Ok(self.lid_closed.get())
+    }
+
     async fn act(&self, action: LogindAction) -> std::result::Result<(), Refusal> {
         self.acted.borrow_mut().push(action);
         Ok(())
@@ -40,7 +46,7 @@ impl Login for MockWorld {
 
 impl Power for MockWorld {
     async fn source(&self) -> PowerSource {
-        self.power
+        self.power.get()
     }
 }
 
@@ -112,7 +118,8 @@ fn world(power: PowerSource) -> (MockWorld, UnboundedReceiver<Event>) {
     let world = MockWorld {
         sessions: RefCell::new(vec![idle_session()]),
         inhibitors: RefCell::new(Vec::new()),
-        power,
+        lid_closed: Cell::new(false),
+        power: Cell::new(power),
         acted: RefCell::new(Vec::new()),
         jobs: RefCell::new(Vec::new()),
         events: send,

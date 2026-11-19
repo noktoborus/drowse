@@ -141,6 +141,51 @@ resume from for `hibernate`); the uConsole with a CM5 has no suspend.
 To sleep, set `action: suspend` in the last section of the power chain
 in `/etc/drowse.yaml`.
 
+### The lid
+
+With `lid:` in `/etc/drowse.yaml`, the lid closed picks the chains of
+`lid`, the lid open those of `main`. With no `lid:` the lid is not
+looked at. A chain of `lid` not set is empty.
+
+When the lid or the power source changes the chain, and the first
+section of the new chain runs the same `enter` and `leave` as the
+section entered, that section carries over: nothing runs, and the next
+section of the new chain counts from that moment. So the power save
+stays on when the lid is closed, and the power off comes 10 min later:
+
+```yaml
+sections:
+  - &powersave
+    after: 10m
+    enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave
+    leave: /usr/libexec/drowse/drowsed-tuned leave
+    hint: power save
+
+main:
+  battery:
+    - *powersave
+    - {after: 38m, countdown: 2m, action: poweroff}
+lid:
+  battery:
+    - {<<: *powersave, after: 0}
+    - {after: 10m, countdown: never, action: poweroff}
+```
+
+Any other change of the chain is activity: the section entered is left,
+and the count starts anew by the new chain.
+
+logind acts on the lid itself, and drowsed does not hold it. Keep logind
+from it in one of two ways:
+
+- `HandleLidSwitch=ignore` and `HandleLidSwitchExternalPower=ignore` in
+  `/etc/systemd/logind.conf.d/`;
+- or an inhibitor of `handle-lid-switch` taken in the graphical session
+  (`systemd-inhibit --what=handle-lid-switch sleep infinity` started by
+  sway). logind takes it only from a process of an active session.
+
+In a bag the keys get pressed. A key is activity, so the chain of `lid`
+may never reach its end.
+
 ### The commands of the sections: short
 
 A command section (`enter`, `leave`) has 15 s to run; past it systemd

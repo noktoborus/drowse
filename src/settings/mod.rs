@@ -1,6 +1,7 @@
 //! The settings of the service, read from `/etc/drowse.yaml`.
 
 pub mod action;
+pub mod chain;
 pub mod sessions;
 pub mod time;
 pub mod yaml;
@@ -9,68 +10,20 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 pub use action::{Command, LogindAction};
+pub use chain::{Chain, Group, Power};
 pub use time::Span;
-pub use yaml::{Section, SectionKind};
+pub use yaml::{Chains, Section, SectionKind};
 
 use crate::error::{Error, Result};
 
 /// The path of the settings file.
 pub const PATH: &str = "/etc/drowse.yaml";
 
-/// The chain the service runs.
-pub const MAIN: &str = "main";
-
-/// The name of a section, as it stands in the file: the chain, the power
-/// source, the number from 1. The journal, the unit and the errors of the
-/// settings give it alike.
-pub fn section_name(power: Power, index: usize) -> String {
-    format!("{MAIN}.{}.{}", power.instance(), index + 1)
-}
-
-/// The power source and the index of a section, from its name.
-pub fn parse_section_name(name: &str) -> Option<(Power, usize)> {
-    let rest = name.strip_prefix(MAIN)?.strip_prefix('.')?;
-    let (power, number) = rest.split_once('.')?;
-    if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let power = Power::ALL
-        .into_iter()
-        .find(|known| known.instance() == power)?;
-    number
-        .parse::<usize>()
-        .ok()?
-        .checked_sub(1)
-        .map(|index| (power, index))
-}
-
-/// A power source.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Power {
-    /// On battery.
-    Battery,
-    /// On AC, or the power source is not known.
-    Ac,
-}
-
-impl Power {
-    /// Both power sources.
-    pub const ALL: [Self; 2] = [Self::Battery, Self::Ac];
-
-    /// The name in the file and in the name of a section: `battery`, `ac`.
-    pub fn instance(self) -> &'static str {
-        match self {
-            Self::Battery => "battery",
-            Self::Ac => "ac",
-        }
-    }
-}
-
 /// The settings used by the running service.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
-    battery: Vec<Section>,
-    ac: Vec<Section>,
+    main: Chains,
+    lid: Option<Chains>,
     classes: BTreeSet<String>,
 }
 
@@ -80,11 +33,23 @@ impl Settings {
         self.classes.contains(class)
     }
 
-    /// The sections of a power source, the first one first.
-    pub fn sections(&self, power: Power) -> &[Section] {
-        match power {
-            Power::Battery => &self.battery,
-            Power::Ac => &self.ac,
+    /// The sections of a chain, the first one first. A chain not set is
+    /// empty.
+    pub fn sections(&self, chain: Chain) -> &[Section] {
+        let chains = match chain.group {
+            Group::Main => Some(&self.main),
+            Group::Lid => self.lid.as_ref(),
+        };
+        chains.map_or(&[], |chains| chains.get(chain.power))
+    }
+
+    /// The chain in use: `lid` with the lid closed, when the file has
+    /// `lid:`; else `main`, and the lid is not looked at.
+    pub fn chain(&self, lid_closed: bool, power: Power) -> Chain {
+        if lid_closed && self.lid.is_some() {
+            Chain::lid(power)
+        } else {
+            Chain::main(power)
         }
     }
 }
@@ -92,8 +57,8 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            battery: Vec::new(),
-            ac: Vec::new(),
+            main: Chains::default(),
+            lid: None,
             classes: sessions::default_classes(),
         }
     }
@@ -115,8 +80,8 @@ pub fn load(path: &Path) -> Result<Settings> {
 pub fn parse(text: &str) -> Result<Settings> {
     let file = yaml::parse(text)?;
     Ok(Settings {
-        battery: file.main.battery,
-        ac: file.main.ac,
+        main: file.main,
+        lid: file.lid,
         classes: file.sessions.classes.into_iter().collect(),
     })
 }
@@ -127,23 +92,31 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn a_section_has_one_name_in_the_file_the_unit_and_the_errors() {
-        assert_eq!(section_name(Power::Battery, 0), "main.battery.1");
-        assert_eq!(section_name(Power::Ac, 2), "main.ac.3");
-        for power in Power::ALL {
-            for index in [0, 1, 9] {
-                let name = section_name(power, index);
-                assert_eq!(parse_section_name(&name), Some((power, index)));
-            }
-        }
+    fn a_section_has_one_name_in_the_unit_and_the_errors() {
+        let chain = Chain::lid(Power::Battery);
         assert_eq!(
-            crate::engine::unit_name(Power::Battery, 1),
-            "drowsed-stage@main.battery.2.service"
+            crate::engine::unit_name(chain, 1),
+            "drowsed-stage@lid.battery.2.service"
         );
-        let error = parse("main:\n  battery: [{after: 1m}, {after: 1m, action: nap}]\n")
+        let error = parse("lid:\n  battery: [{after: 1m}, {after: 1m, action: nap}]\n")
             .unwrap_err()
             .to_string();
-        assert!(error.contains(&section_name(Power::Battery, 1)), "{error}");
+        assert!(error.contains(&chain.section_name(1)), "{error}");
+    }
+
+    #[test]
+    fn the_lid_picks_the_chain_only_when_the_file_has_lid() {
+        let main = parse("main:\n  battery: [{after: 1m}]\n").unwrap();
+        assert_eq!(
+            main.chain(true, Power::Battery),
+            Chain::main(Power::Battery)
+        );
+        let lid = parse("lid:\n  battery: [{after: 0}]\n").unwrap();
+        assert_eq!(lid.chain(false, Power::Ac), Chain::main(Power::Ac));
+        assert_eq!(lid.chain(true, Power::Ac), Chain::lid(Power::Ac));
+        assert!(lid.sections(Chain::lid(Power::Ac)).is_empty());
+        assert_eq!(lid.sections(Chain::lid(Power::Battery)).len(), 1);
+        assert!(main.sections(Chain::lid(Power::Battery)).is_empty());
     }
 
     #[test]
@@ -155,7 +128,7 @@ mod tests {
     #[test]
     fn package_settings_are_valid_and_keep_the_main_chain() {
         let settings = parse(include_str!("../../etc/drowse.yaml")).unwrap();
-        let battery = settings.sections(Power::Battery);
+        let battery = settings.sections(Chain::main(Power::Battery));
         assert_eq!(battery.len(), 2);
         assert_eq!(battery[0].after, Span::Time(Duration::from_secs(600)));
         assert_eq!(battery[0].countdown, Span::Never);
@@ -173,7 +146,7 @@ mod tests {
             battery[1].kind,
             SectionKind::Action(LogindAction::Poweroff)
         ));
-        assert_eq!(settings.sections(Power::Ac).len(), 0);
+        assert_eq!(settings.sections(Chain::main(Power::Ac)).len(), 0);
         assert!(settings.counts_class("greeter"));
         assert!(!settings.counts_class("background"));
 

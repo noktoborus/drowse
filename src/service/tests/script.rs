@@ -56,6 +56,33 @@ impl Script {
         let _ = self.world.events.send(event);
     }
 
+    /// The lid is closed or opened; logind sends its signal.
+    pub(super) fn lid(&self, closed: bool) {
+        self.world.lid_closed.set(closed);
+        self.tell(Event::Login);
+    }
+
+    /// The power source changes; UPower sends its signal.
+    pub(super) fn power(&self, power: PowerSource) {
+        self.world.power.set(power);
+        self.tell(Event::Power(power));
+    }
+
+    /// The session is used or left idle; logind sends its signal.
+    pub(super) fn idle(&self, idle: bool, since: u64) {
+        let mut sessions = self.world.sessions.borrow_mut();
+        sessions[0].idle = idle;
+        sessions[0].idle_since = since;
+        drop(sessions);
+        self.tell(Event::Login);
+    }
+
+    /// The time of the test now in microseconds of the clock of the
+    /// service.
+    pub(super) fn now(&self) -> u64 {
+        u64::try_from(self.start.elapsed().as_micros()).unwrap_or(u64::MAX)
+    }
+
     /// An inhibitor is taken; with `told`, logind sends its signal.
     pub(super) fn take(&self, inhibitor: Inhibitor, told: bool) {
         self.world.inhibitors.borrow_mut().push(inhibitor);

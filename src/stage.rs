@@ -6,7 +6,7 @@ use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 
-use crate::settings::{self, Command, Power, SectionKind, parse_section_name};
+use crate::settings::{self, Chain, Command, SectionKind};
 
 /// What a unit of a section runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +32,7 @@ impl Part {
 #[derive(Debug)]
 pub enum StageError {
     /// The instance is not the name of a section: `main.battery.<n>`,
-    /// `main.ac.<n>`.
+    /// `lid.ac.<n>`, …
     Instance(String),
     /// The settings file cannot be read.
     Settings(crate::Error),
@@ -54,7 +54,7 @@ impl fmt::Display for StageError {
         match self {
             Self::Instance(instance) => write!(
                 f,
-                "{instance}: not the name of a section (main.battery.<n>, main.ac.<n>)"
+                "{instance}: not the name of a section (main.battery.<n>, lid.ac.<n>, ...)"
             ),
             Self::Settings(_) => f.write_str("cannot read the settings"),
             Self::NoStage(instance) => write!(f, "{instance}: no such section in the settings"),
@@ -76,22 +76,16 @@ impl std::error::Error for StageError {
     }
 }
 
-/// Reads an instance, the name of a section: its power source and its
-/// index.
-pub fn parse_instance(instance: &str) -> Option<(Power, usize)> {
-    parse_section_name(instance)
-}
-
 /// The command of a part of a section, if it has one. `None`: nothing to run.
 pub fn command_of(
     settings: &settings::Settings,
     instance: &str,
     part: Part,
 ) -> Result<Option<Command>, StageError> {
-    let (power, number) =
-        parse_instance(instance).ok_or_else(|| StageError::Instance(instance.to_owned()))?;
+    let (chain, number) = Chain::parse_section_name(instance)
+        .ok_or_else(|| StageError::Instance(instance.to_owned()))?;
     let section = settings
-        .sections(power)
+        .sections(chain)
         .get(number)
         .ok_or_else(|| StageError::NoStage(instance.to_owned()))?;
     match part {
@@ -137,25 +131,10 @@ main:
     - action: poweroff
   ac:
     - enter: nmcli radio all off
+lid:
+  battery:
+    - enter: rfkill block all
 ";
-
-    #[test]
-    fn instances() {
-        assert_eq!(parse_instance("main.battery.1"), Some((Power::Battery, 0)));
-        assert_eq!(parse_instance("main.ac.13"), Some((Power::Ac, 12)));
-        for wrong in [
-            "main.battery",
-            "main.battery.",
-            "main.battery.0",
-            "main.battery.x",
-            "main.dc.1",
-            "lid.ac.1",
-            "battery-0",
-            "main.ac.-1",
-        ] {
-            assert_eq!(parse_instance(wrong), None, "{wrong}");
-        }
-    }
 
     #[test]
     fn the_parts_of_a_stage() {
@@ -180,6 +159,14 @@ main:
         assert!(matches!(
             command_of(&settings, "main.ac.4", Part::Enter),
             Err(StageError::NoStage(_))
+        ));
+        let lid = command_of(&settings, "lid.battery.1", Part::Enter)
+            .unwrap()
+            .unwrap();
+        assert_eq!(lid.words(), ["rfkill", "block", "all"]);
+        assert!(matches!(
+            command_of(&settings, "battery-0", Part::Enter),
+            Err(StageError::Instance(_))
         ));
     }
 }
