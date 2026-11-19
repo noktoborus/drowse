@@ -619,6 +619,25 @@ fn a_failed_command_is_a_warning_and_the_stages_go_on() {
 }
 
 #[test]
+fn the_start_is_one_line_of_the_sources_and_the_state() {
+    let settings = settings::parse(STAGES).unwrap();
+    let left_up = vec![POWER_SAVE.to_owned()];
+    let (_, out) = Engine::new(settings, PowerSource::Battery, false, 0, left_up);
+    let lines: Vec<_> = out
+        .iter()
+        .filter(|command| matches!(command, Command::Journal(..)))
+        .collect();
+    assert_eq!(lines.len(), 1);
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "start: logind and upower on the bus; power: battery; lid: open; \
+         chain: main.battery, 3 sections; verbosity: info; \
+         left up, stopped: drowsed-stage@main.battery.1.service"
+    ));
+}
+
+#[test]
 fn upower_gone_and_back() {
     let (_, out) = Engine::new(
         settings::Settings::default(),

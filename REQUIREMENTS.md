@@ -338,6 +338,10 @@ timer that finds the same is silent.
 
 It writes:
 
+- **The start**: one line of the sources and the state: logind and
+  UPower on the bus or not, the power, the lid, the chain in use and its
+  sections, the verbosity, the units of sections left up and stopped.
+  It is `warning` when UPower does not answer, else `info`.
 - **A change of state**: idle or active, with the next section and its
   time; the power source or the lid, and whether the times moved or a
   section carried over; an entry held, with who holds it and why, and
@@ -356,6 +360,7 @@ A source that comes back is written once, too.
 Examples:
 
 ```
+start: logind and upower on the bus; power: battery; lid: open; chain: main.battery, 2 sections; verbosity: info
 idle, on battery: poweroff in 17 min
 announce: poweroff in 2 min
 action: poweroff

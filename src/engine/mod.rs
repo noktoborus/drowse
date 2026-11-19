@@ -15,7 +15,7 @@ use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
-/// The line of the journal when UPower does not answer; its pair is
+/// The words of the journal when UPower does not answer; their pair is
 /// `UPOWER_BACK`.
 const UPOWER_GONE: &str = "upower: not on the bus; the power is taken as AC";
 
@@ -149,7 +149,9 @@ pub struct Engine {
 
 impl Engine {
     /// The engine at the start of the service; the units of the stages left
-    /// up from before are stopped.
+    /// up from before are stopped. The first line of the journal says the
+    /// sources and the state at the start; it is a warning when UPower
+    /// does not answer.
     pub fn new(
         settings: Settings,
         power: PowerSource,
@@ -168,15 +170,19 @@ impl Engine {
             units: Units::default(),
             pending_logind: None,
         };
-        let mut out: Vec<Command> = engine
-            .units
-            .adopt_left_up(left_up)
-            .into_iter()
-            .map(Command::Job)
-            .collect();
-        if power == PowerSource::Unknown {
-            out.push(warning(UPOWER_GONE.to_owned()));
-        }
+        let start = engine.start_line(&left_up);
+        let mut out = vec![if power == PowerSource::Unknown {
+            warning(start)
+        } else {
+            info(start)
+        }];
+        out.extend(
+            engine
+                .units
+                .adopt_left_up(left_up)
+                .into_iter()
+                .map(Command::Job),
+        );
         (engine, out)
     }
 
@@ -771,6 +777,31 @@ impl Engine {
             return format!("session {} ({}) in use", session.id, session.user);
         }
         "activity".to_owned()
+    }
+
+    /// The line of the journal at the start: the sources, the power, the
+    /// lid, the chain in use, the verbosity and the units left up.
+    fn start_line(&self, left_up: &[String]) -> String {
+        let sources = if self.power == PowerSource::Unknown {
+            format!("logind on the bus; {UPOWER_GONE}")
+        } else {
+            format!(
+                "logind and upower on the bus; power: {}",
+                power_name(self.power)
+            )
+        };
+        let chain = self.chain();
+        let mut line = format!(
+            "start: {sources}; lid: {}; chain: {}, {} sections; verbosity: {}",
+            lid_name(self.lid_closed),
+            chain.name(),
+            self.settings.sections(chain).len(),
+            self.settings.verbosity().name()
+        );
+        if !left_up.is_empty() {
+            line.push_str(&format!("; left up, stopped: {}", left_up.join(", ")));
+        }
+        line
     }
 
     /// The level of a cancel: `notice` when it cancels something, a
