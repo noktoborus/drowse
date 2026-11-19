@@ -1,5 +1,8 @@
 //! Tests of the driver: a mock of the world, the clock of tokio paused.
 
+mod hold;
+mod script;
+
 use std::cell::RefCell;
 
 use tokio::sync::mpsc::{self, UnboundedSender};
@@ -13,6 +16,7 @@ use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 /// The world, as a test sets it.
 struct MockWorld {
     sessions: RefCell<Vec<Session>>,
+    inhibitors: RefCell<Vec<Inhibitor>>,
     power: PowerSource,
     acted: RefCell<Vec<LogindAction>>,
     jobs: RefCell<Vec<String>>,
@@ -25,7 +29,7 @@ impl Login for MockWorld {
     }
 
     async fn inhibitors(&self) -> Result<Vec<Inhibitor>> {
-        Ok(Vec::new())
+        Ok(self.inhibitors.borrow().clone())
     }
 
     async fn act(&self, action: LogindAction) -> std::result::Result<(), Refusal> {
@@ -107,6 +111,7 @@ fn world(power: PowerSource) -> (MockWorld, UnboundedReceiver<Event>) {
     let (send, receive) = mpsc::unbounded_channel();
     let world = MockWorld {
         sessions: RefCell::new(vec![idle_session()]),
+        inhibitors: RefCell::new(Vec::new()),
         power,
         acted: RefCell::new(Vec::new()),
         jobs: RefCell::new(Vec::new()),
