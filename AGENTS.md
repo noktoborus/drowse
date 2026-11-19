@@ -159,6 +159,8 @@ RULE layout.system : the files of the system are in a directory by
      `preset/` the preset, `etc/` the settings file, `waybar/` the
      module of waybar, `libexec/` the helpers of the sections
      (`/usr/libexec/drowse/`); each file named as it is installed
+EX+  dbus/io.github.noktoborus.Drowse.conf, systemd/drowsed.service,
+     preset/50-drowse.preset
 RULE layout.examples = examples/, files the user copies by hand; the
      package installs them with the documentation, never in the system
      by default
@@ -171,8 +173,6 @@ WHY  with no chains the service does nothing; the policy
      is in the file, where the user sees and changes it
 THEN a change of the file changes etc/drowse.yaml and its test in the
      same commit
-EX+  dbus/io.github.noktoborus.Drowse.conf, systemd/drowsed.service,
-     preset/50-drowse.preset
 RULE license = MIT (LICENSE); every crate it takes allows it
 RULE layout.plans : the work put off is on the branch `plans`, a history
      of its own; one file a subject; main carries no plan

@@ -2,8 +2,8 @@
 
 While the system is idle, the service enters the sections of its chains,
 one after another: a command and its undo, an action of power. It takes
-the idle state and the inhibitors from logind, and knows the power
-source.
+the idle state, the inhibitors and the lid from logind, and the power
+source from UPower.
 
 ## Terms
 
@@ -12,9 +12,10 @@ source.
   of all kinds count alike: a graphical one, a console, ssh. A session
   in the state `closing` is left out: after a logout nobody updates its
   idle state (notes/session-end.md). A session of a class not in
-  class not in `sessions.classes` is left out (see "Settings"). The service works this out itself from the
-  sessions (`ListSessionsEx()`, the state of each), not from `IdleHint`
-  of the Manager, which counts `closing` sessions too.
+  `sessions.classes` is left out (see "Settings"). The service works
+  this out itself from the sessions (`ListSessionsEx()`, the state of
+  each), not from `IdleHint` of the Manager, which counts `closing`
+  sessions too.
 - **The start of the idle state**: the latest start of idle of the
   sessions counted. It starts no sooner than the last of these moments,
   each counted as activity:
@@ -37,7 +38,8 @@ source.
   with the screen off or locked, the inhibitor of system is for that.
 - **Inhibitor of system**: an inhibitor of logind, `block` or
   `block-weak`, of `idle`, `sleep` or `shutdown`, taken by hand or by a
-  program. No action comes. It holds with the screen locked or off. An
+  program. It holds the entry into a section of its kind (see "An
+  inhibitor of system"). It holds with the screen locked or off. An
   inhibitor of `idle` also stops swayidle (no screen off, no lock); one of
   `sleep` and `shutdown` does not (notes/sway-inhibitors.md).
 
@@ -51,7 +53,7 @@ source.
 | All sessions idle, the lid closed, `lid:` in the file | by `lid.battery` or `lid.ac` |
 | An ssh connection is open (with a terminal or not) | no |
 | Inhibitor of screen and system | no |
-| Inhibitor of system | no |
+| Inhibitor of system | the entry of its kind waits |
 | The charger is put in or taken out, the lid closed or opened, while idle | the same section carries over, or a new count from that moment |
 | The charge is low or critical | by UPower |
 
@@ -90,8 +92,9 @@ times of the screen off and of the lock, on battery or on AC.
 
 ## The action
 
-Each power source has a chain of sections. The service enters one section
-at a time while the system stays idle. A section has `after`,
+The chain in use is picked by the lid and the power source (see "The
+lid"). The service enters its sections one at a time while the system
+stays idle. A section has `after`,
 `countdown`, and either a command (`enter`, `leave`), a logind action
 (`action`), or neither. The chains are in `/etc/drowse.yaml` (see
 "Settings").
@@ -179,13 +182,11 @@ source. When the power source or the lid changes it:
   `hibernate`, `hybrid-sleep`, `suspend-then-hibernate`, `sleep`. The
   service calls it through logind (`*WithFlags`,
   `SD_LOGIND_ROOT_CHECK_INHIBITORS`). It has no `leave` command.
-- A section has one name, as it stands in the file: the chain, the power
-  source, the number from 1 (`main.battery.1`, `main.battery.2`,
-  `main.ac.1`). The journal, the unit and the errors of the settings
-  give this name.
-- A command runs in `drowsed-stage@.service` (instance `main.battery.1`,
-  `main.battery.2`, `main.ac.1`, …: the name of the section), which runs
-  `drowsed stage enter <instance>`;
+- A section has one name, as it stands in the file: the group, the power
+  source, the number from 1 (`main.battery.1`, `lid.ac.2`). The journal,
+  the unit and the errors of the settings give this name.
+- A command runs in `drowsed-stage@.service` (the instance is the name
+  of the section), which runs `drowsed stage enter <instance>`;
   `leave` runs when the unit stops, as `drowsed stage leave <instance>`.
   `drowsed stage` reads the command from `/etc/drowse.yaml`, splits it
   as a shell does (no shell
@@ -205,8 +206,8 @@ source. When the power source or the lid changes it:
 - A section with no `enter` but a `leave` has a unit too: its start runs
   nothing, its stop runs `leave`.
 - `leave` runs whenever an entered section is left: before the next one
-  is entered, on activity, an inhibitor let go, a change of the power
-  source, a stop of the service, a sleep. The service keeps a queue of
+  is entered, on activity (a change of the chain that does not carry
+  the section over is activity), a stop of the service, a sleep. The service keeps a queue of
   jobs for each unit: a start, then a stop, one at a time, the next when
   the one before has ended (`JobRemoved` of systemd). So a stop never
   cuts a start that runs. An entry waits until no job of any unit runs.
@@ -278,7 +279,7 @@ the user, a panel) reads it there and does not work it out again.
 - The name and the interface are `io.github.noktoborus.Drowse`. Two
   objects:
   - `/io/github/noktoborus/Drowse`: `State`, `ScheduledAction`,
-    `PowerSource`.
+    `PowerSource`, `Lid`.
     Anyone may read it: every user can learn of an action to come.
   - `/io/github/noktoborus/Drowse/HeldBy`: `HeldBySessions`,
     `HeldByInhibitors`. Only the group `wheel` may read it.
@@ -288,11 +289,6 @@ the user, a panel) reads it there and does not work it out again.
 - logind still shows its sessions and inhibitors to anyone
   (`ListInhibitors()`, `loginctl`). To close them is a setting of the
   system, not of drowse.
-
-The interface on the bus is for reading only: properties and their
-changes, no methods. Anyone reads the state; only the group `wheel`
-reads the details (the object `HeldBy`), by one rule of the policy of
-D-Bus.
 
 **No way round the system.** The service takes no commands of its own:
 no method on the bus, no socket, no file to write to, no signal of its
@@ -326,14 +322,13 @@ timer that finds the same is silent.
 
 It writes:
 
-- **A change of state**: idle or active; the power source; an inhibitor
-  taken or let go, with who holds it and why; the time of the action set,
-  and when it is.
+- **A change of state**: idle or active, with the next section and its
+  time; the power source or the lid, and whether the times moved or a
+  section carried over; an entry held, with who holds it and why, and
+  its release.
 - **The announce and the action**: the action announced; the action
   done.
-- **Why the action is cancelled**: activity in a graphical
-  session or a console (its id, user); a new session, ssh too (its id,
-  user, kind); an inhibitor (who, why); a change of the power source.
+- **Why the action is cancelled**: a session in use (its id, user).
 - **A source that is not there**: logind not on the bus; UPower not
   there, so the power is taken as AC; an action that logind refuses,
   with its answer.
@@ -349,14 +344,12 @@ idle, on battery: poweroff in 17 min
 announce: poweroff in 2 min
 action: poweroff
 cancel: session 4 (alice) in use
-cancel: inhibitor of sleep:shutdown by "drowse-inhibit" (uid 1000): "emerge"
-inhibitors let go: a new count
 power: AC; the times moved
 lid: closed; section main.battery.1 (power save) -> lid.battery.1 (power save): the same commands, none run; drowsed-stage@main.battery.1.service runs on
 idle, on battery, the lid closed: power save in 0 s
 idle, on AC: no action
 upower: no answer; the power is taken as AC
-section main.battery.1 (radio off): started
+section main.battery.1 (power save): started
 held: main.battery.2 (poweroff) by drowse-inhibit (uid 1000): "held by hand"
 released: main.battery.2 (poweroff) now
 drowsed-stage@main.battery.1.service: the command still runs after 4 s; its leave waits
@@ -396,32 +389,10 @@ The keys of a section are:
 section cannot have `enter` or `leave`. A section with neither `enter`
 nor `action` is entered with nothing done.
 
-The package file sets power save after 10 min on battery, then announces
-`poweroff` 38 min later and does it 2 min after that. On AC nothing
-comes. Its `sections` library has an unused `mute-powersave` section.
-
-```yaml
-sessions:
-  classes: [user, user-early, user-light, user-early-light, greeter]
-
-sections:
-  - &mute-powersave
-    after: 10m
-    enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave-no-radio
-    leave: /usr/libexec/drowse/drowsed-tuned leave
-    hint: radio off
-
-main:
-  battery:
-    - after: 10m
-      enter: /usr/libexec/drowse/drowsed-tuned enter cm5-powersave
-      leave: /usr/libexec/drowse/drowsed-tuned leave
-      hint: power save
-    - after: 38m
-      countdown: 2m
-      action: poweroff
-  ac: []
-```
+The file of the package is `etc/drowse.yaml`: on battery the power save
+at 10 min of idle, then `poweroff` 38 min later with an announce of 2
+min; on AC nothing; a library section `mute-powersave` and a `lid:` in a
+comment, as examples.
 
 `sections` is checked but not used by a chain. A chain uses an alias to
 repeat a section, or `<<:` to change some of its keys. Times are seconds
@@ -443,9 +414,6 @@ The mapping `sessions`, one key:
   keeps the system up while it is shown. `classes: [user, user-early,
   user-light, user-early-light]` leaves it out: with nobody logged in, the
   system is then idle.
-- The settings file says how to list the classes logind knows
-  (`varlinkctl introspect`) and the class of each session
-  (`loginctl list-sessions`).
 
 ### A change of the settings
 
@@ -457,12 +425,6 @@ The mapping `sessions`, one key:
   than the start. An announce that ran before the restart is gone.
 - The settings are in `/etc/drowse.yaml`. There are no drop-ins. With
   no file, the chains are empty.
-- The package installs the file with its sections: on battery the
-  profile of TuneD `cm5-powersave` at 10 min of idle, by
-  `drowsed-tuned` (no announce), then
-  `poweroff` 38 min later with an announce of 2 min, at 50 min of idle;
-  on AC nothing. Every other key is there with its default in a comment.
-  With no tuned the first command fails, and the `poweroff` still comes.
 - `drowsed-tuned enter <profile>...` (`/usr/libexec/drowse/`) keeps the
   profile and the mode of TuneD before and the profile set in the
   directory of the unit, then sets the profile. `drowsed-tuned leave`
@@ -470,22 +432,9 @@ The mapping `sessions`, one key:
   `auto`, `tuned-adm off` for none), only when the profile set is still
   active in the mode `manual`. Else someone changed it: it stays, and
   the journal of the unit says so.
-- The package gives the profile of TuneD `cm5-powersave` as an
-  example (`examples/tuned/`, installed with the documentation): for
-  the BCM2712, `powersave`, the CPU at 800 MHz at most, USB autosuspend
-  on every device but those of `KEEP` of `usb-autosuspend.sh` (the
-  keyboard `434b:5543` and its bootloader `1eaf:*`) and the hubs they
-  hang on, which never suspend, the dirty pages written once a minute,
-  runtime PM of every PCI device, and printing and the timers of
-  maintenance stopped. It gives also `cm5-powersave-no-radio`, a deeper
-  step: `cm5-powersave`, and every radio off by its soft block of
-  rfkill, the values before written back at its end; the file of the
-  package does not use it. The user copies them to
-  `/etc/tuned/profiles/`, unless `tuned-adm list` shows them already.
-  Neither is in
-  `ppd.conf` of tuned-ppd: tuned-ppd then keeps its base profile, the
-  one the user chose, and sets it again at its restart
-  (`initialize()` of `tuned/ppd/controller.py`).
+- The package gives the profiles of TuneD `cm5-powersave` and
+  `cm5-powersave-no-radio` as examples (`examples/tuned/`, installed
+  with the documentation); README.md says what they do.
 - A unit `drowsed-config.path` watches `/etc/drowse.yaml`; on a change
   it runs `systemctl try-restart drowsed.service`.
 - `drowsed.service`, `drowsed-config.path` and `drowsed-resume.service`
@@ -526,5 +475,6 @@ Examples: `2h`; `1m 120s`, `1m120s` (both 3 minutes); `90` (90 seconds).
 - Low and critical charge: UPower (`CriticalPowerAction=`).
 - The interface: warnings, notifications, sound, the screen on at a
   warning, the state of the inhibitors, the lifetime of the inhibitors set
-  by hand. See the branch `plans`: `cli.md` (the tool and its module of
-  waybar), `notify-daemon.md` (the daemon of the interface).
+  by hand: `drowse-inhibit`, `drowse-status` and the module of waybar;
+  a daemon of the interface is put off (the branch `plans`,
+  `notify-daemon.md`).

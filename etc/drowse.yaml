@@ -28,8 +28,11 @@ main:
       action: poweroff
   ac: []
 
-# A lid chain can be set separately. This example enters power save at
-# once, then powers off 10 min later:
+# The chains of lid: are used with the lid closed. This example turns the
+# radio off too at once, then powers off 10 min later. A first section
+# with the same enter and leave as the section entered would carry it
+# over with no command run; here the commands differ, so the power save
+# is left and this one entered.
 # lid:
 #   battery:
 #     - <<: *mute-powersave

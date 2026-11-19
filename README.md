@@ -3,9 +3,9 @@
 `drowsed`: a system service of systemd. While every session is idle it
 enters its sections, one after another: a command (and its undo when the
 user comes back), an action of power (suspend, hibernate, power off).
-The chains are set for the battery and for AC. It warns
-before an action, and any activity cancels it. What it does is in
-REQUIREMENTS.md.
+The chains are set for the battery and for AC, with the lid open and
+closed. It warns before an action, and any activity cancels it. What it
+does is in REQUIREMENTS.md; this file says what the system needs.
 
 ## What the system needs
 
@@ -100,7 +100,7 @@ main:
 ```
 
 TuneD writes every value before back when the profile ends. The package
-gives both as examples (`examples/tuned/`, installed with the
+gives both profiles as examples (`examples/tuned/`, installed with the
 documentation). If `tuned-adm list` does not show them, copy them to the
 profiles of TuneD:
 
@@ -110,30 +110,26 @@ cp -r /usr/share/doc/drowse-*/examples/tuned/cm5-powersave \
     /etc/tuned/profiles/
 ```
 
-With no such profile the power save fails, and the `poweroff` still
-comes. It needs:
+The power save needs:
 
-- tuned. `drowsed-tuned enter` keeps the profile before and sets the one
-  of the section; `drowsed-tuned leave` gives the one before back, the
-  mode `auto` as `auto`. If the profile was changed while the section
-  was entered (by the user, by tuned-ppd), it is not given back, and the
-  journal of the unit says so. With tuned-ppd the profile before may be
-  one of the other power source: the power changed while the section
-  was entered. With no tuned the power save fails, and the `poweroff`
-  still comes.
-- Another way, with tuned-ppd: `enter: tuned-adm profile cm5-powersave`,
-  `leave: systemctl try-restart tuned-ppd.service`. tuned-ppd sets at
-  its start the profile the user chose, for the power source now. It
-  works only if tuned-ppd sets the profile again at its start, and the
-  restart must end in the time of the `leave`.
+- tuned, and the profile. With no tuned or no profile the power save
+  fails, and the `poweroff` still comes.
 - `arm_freq_min=800` or lower in `config.txt`. cpufreq keeps the limit
   inside the range of the firmware, and the default lowest of the CM5 is
   1500 MHz.
 
-A command section has no default command: set `enter:` to run one. One
-section is entered at a time: before the next section is entered, the
-one before is left, and its `leave` runs and is waited for; on activity
-the section entered is left. A failed `enter` has no `leave`.
+`drowsed-tuned enter <profile>` keeps the profile of TuneD before and
+sets that of the section; `drowsed-tuned leave` gives the one before
+back, the mode `auto` as `auto`. If the profile was changed while the
+section was entered (by the user, by tuned-ppd), it stays, and the
+journal of the unit says so. The profile before is given back as it
+was: if the power source changed meanwhile, tuned-ppd does not map it
+again.
+
+Another way, with tuned-ppd: `enter: tuned-adm profile cm5-powersave`,
+`leave: systemctl try-restart tuned-ppd.service`. At its start tuned-ppd
+sets the profile the user chose, for the power source now. The restart
+must end within the time of a `leave`.
 
 `poweroff` works on any device. A sleep needs
 the kernel and the system set up for it (`CONFIG_SUSPEND`, a place to
@@ -220,10 +216,11 @@ system up. Hold it by an inhibitor: `drowse-inhibit on`, or
 
 ### drowse-inhibit and polkit
 
-`drowse-inhibit` holds command sections with `idle` by default. The flags
-`--power` holds logind sleep and shutdown actions; `--all` holds both.
-In a
-local session polkit gives it with no password. From ssh polkit asks the
+`drowse-inhibit` holds the sections with a command by `idle`, by
+default. `--power` holds the actions of logind (`sleep:shutdown`);
+`--all` holds both. Its inhibitors are of mode `block-weak`, which
+swayidle does not read: the screen still goes off and locks. In a local
+session polkit gives them with no password. From ssh polkit asks the
 password of an admin. On a terminal the tool runs `pkttyagent` (of
 polkit), and the password is typed there. With no `pkttyagent`, or with
 no terminal, the inhibitor from ssh is refused. Root is never asked: the
@@ -245,14 +242,13 @@ can hold the whole sequence:
 drowse-inhibit --all -- sh -c 'first; second'
 ```
 
-Use `on`, `off` and `toggle` with the same flags. The waybar click uses
-`drowse-inhibit cycle`: none, power, both, none. The default is `--idle`
-so a build can keep full CPU speed while still allowing screen blanking.
+Use `on`, `off` and `toggle` with the same flags. The default is
+`--idle`: a build keeps the CPU at full speed, and the screen still goes
+off.
 
 The inhibitor ends with the command; its exit code is that of the
 command. As root (`sudo drowse-inhibit -- emerge ...`) the inhibitor is
-of uid 0; the module of waybar shows it as `own` too, as it shows the
-inhibitors of `drowse-inhibit` of root.
+of uid 0; the module of waybar shows it as its own too.
 
 ### KillUserProcesses=yes (recommended)
 
@@ -287,16 +283,17 @@ it was taken; with `no` it outlives the logout.
 ## The state in waybar
 
 `drowse-status --waybar --follow` writes one line of JSON at each change,
-and as the time left runs; waybar needs no `interval`. A click cycles
-the power inhibitors; it does not touch one of
+and as the time left runs; waybar needs no `interval`. The module shows
+the icon only; the time left and what holds the system are in the
+tooltip. A click runs `drowse-inhibit cycle`: none, then `--power`, then
+`--all`, then none. It does not touch an inhibitor of
 `drowse-inhibit -- <command>`, which the tooltip shows as
-`until <command>`. The module shows the icon
-only, in the middle of a width that does not change; the time left and
-what holds the system are in the tooltip.
+`until <command>`.
 
 With Waybar support enabled, the package puts the module in
 `/etc/xdg/waybar/drowse.jsonc` and its colours in
-`/etc/xdg/waybar/drowse.css`. In the config of waybar:
+`/etc/xdg/waybar/drowse.css` (the files of `waybar/`, with the icons
+and the classes). In the config of waybar:
 
 ```jsonc
 "include": ["/etc/xdg/waybar/drowse.jsonc"],
@@ -309,34 +306,8 @@ and in its `style.css`:
 @import "/etc/xdg/waybar/drowse.css";
 ```
 
-The module, as the file has it:
-
-```json
-"custom/drowse": {
-    "exec": "drowse-status --waybar --follow",
-    "return-type": "json",
-    "format": "{icon}",
-    "min-length": 3,
-    "max-length": 3,
-    "align": 0.5,
-    "format-icons": {
-        "unknown": "?",
-        "announced": "⏰",
-        "held": "🔒",
-        "own-all": "☕",
-        "own-power": "🔒",
-        "own-idle": "🛠",
-        "other": "🔒",
-        "session-other": "👤",
-        "idle": "🌙",
-        "session-own": "🖥",
-        "active": ""
-    },
-    "on-click": "drowse-inhibit cycle"
-}
-```
-
-With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announced` nf-md-alarm, `own-all` nf-md-coffee, `own-power` nf-md-lock, `own-idle` nf-md-cog, `other` nf-md-lock, `session-other` nf-md-account, `idle` nf-md-sleep, `session-own` nf-md-monitor):
+With a Nerd Font, the glyphs of Material Design in place of the icons
+of the module:
 
 ```json
     "format-icons": {
@@ -352,20 +323,6 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
         "session-own": "󰍹",
         "active": ""
     },
-```
-
-The classes of the module: the state (`active`, `idle`, `announced`, `held`,
-`unknown`), what holds the system (`own-all`, `own-power`, `own-idle`, `other`, `session-other`,
-`session-own`, `none`, `hidden`) and the power (`battery`, `ac`).
-
-```css
-#custom-drowse.announced     { color: #f38ba8; animation: blink 1s steps(2) infinite; }
-#custom-drowse.own           { color: #a6e3a1; }
-#custom-drowse.other         { color: #f9e2af; }
-#custom-drowse.session-other { color: #89b4fa; }
-#custom-drowse.unknown       { color: #6c7086; }
-
-@keyframes blink { to { opacity: 0.3; } }
 ```
 
 The texts are in English or Russian, by the locale of the session.
