@@ -344,6 +344,21 @@ async fn held(inhibitors: &Inhibitors, who: &str) -> bool {
     true
 }
 
+/// What the inhibitors of `drowse-inhibit on` held now hold, sorted,
+/// after a moment for a holder let go to end.
+async fn own_held(inhibitors: &Inhibitors) -> Vec<String> {
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let mut whats: Vec<String> = inhibitors
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|taken| taken.row.1 == "drowse-inhibit" && taken.held())
+        .map(|taken| taken.row.0.clone())
+        .collect();
+    whats.sort();
+    whats
+}
+
 #[tokio::test]
 #[ignore = "needs dbus-daemon"]
 async fn drowse_inhibit_on_a_bus() {
@@ -379,7 +394,10 @@ async fn drowse_inhibit_on_a_bus() {
     let on = drowse_inhibit(&daemon.address, &["on", "--why", "a test"]).await;
     let said = String::from_utf8(on.stdout).unwrap();
     assert!(on.status.success(), "{said}");
-    assert_eq!(said, "drowse-inhibit: the system is held (a test)\n");
+    assert_eq!(
+        said,
+        "drowse-inhibit: the sections with a command held (a test)\n"
+    );
     assert!(
         held(&inhibitors, "drowse-inhibit").await,
         "the holder let go"
@@ -407,6 +425,26 @@ async fn drowse_inhibit_on_a_bus() {
         String::from_utf8(off.stdout).unwrap(),
         "drowse-inhibit: nothing to let go\n"
     );
+
+    let click = drowse_inhibit(&daemon.address, &["cycle"]).await;
+    assert_eq!(
+        String::from_utf8(click.stdout).unwrap(),
+        "drowse-inhibit: the sections with a command held (held by hand)\n"
+    );
+    assert_eq!(own_held(&inhibitors).await, ["idle"]);
+    let click = drowse_inhibit(&daemon.address, &["cycle"]).await;
+    assert_eq!(
+        String::from_utf8(click.stdout).unwrap(),
+        "drowse-inhibit: the sections with a command, the power off and the sleep held \
+         (held by hand)\n"
+    );
+    assert_eq!(own_held(&inhibitors).await, ["idle", "shutdown:sleep"]);
+    let click = drowse_inhibit(&daemon.address, &["cycle"]).await;
+    assert_eq!(
+        String::from_utf8(click.stdout).unwrap(),
+        "drowse-inhibit: the system is let go\n"
+    );
+    assert!(own_held(&inhibitors).await.is_empty());
 
     let both = drowse_inhibit(&daemon.address, &["--all", "--", "true"]).await;
     assert_eq!(both.status.code(), Some(0), "{both:?}");
